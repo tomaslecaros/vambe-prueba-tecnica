@@ -18,7 +18,6 @@ const common_1 = require("@nestjs/common");
 const bull_1 = require("@nestjs/bull");
 const prisma_service_1 = require("../../common/services/prisma.service");
 const queue_constants_1 = require("../../common/constants/queue.constants");
-const categorization_dto_1 = require("./dto/categorization.dto");
 let CategorizationService = CategorizationService_1 = class CategorizationService {
     prisma;
     categorizationQueue;
@@ -72,6 +71,94 @@ let CategorizationService = CategorizationService_1 = class CategorizationServic
             throw error;
         }
     }
+    async getUploadProgress(uploadId) {
+        const jobs = await this.categorizationQueue.getJobs([
+            'waiting',
+            'active',
+            'completed',
+            'failed',
+        ]);
+        const uploadJobs = jobs.filter((job) => job.data.uploadId === uploadId);
+        const jobStates = await Promise.all(uploadJobs.map((j) => j.getState()));
+        const waiting = jobStates.filter((state) => state === 'waiting').length;
+        const active = jobStates.filter((state) => state === 'active').length;
+        const completed = jobStates.filter((state) => state === 'completed').length;
+        const failed = jobStates.filter((state) => state === 'failed').length;
+        const total = uploadJobs.length;
+        const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
+        const clientsData = await Promise.all(uploadJobs.slice(0, 20).map(async (job) => {
+            const state = await job.getState();
+            const client = await this.prisma.client.findUnique({
+                where: { id: job.data.clientId },
+                include: { categorization: true },
+            });
+            return {
+                jobId: job.id,
+                clientId: job.data.clientId,
+                email: client?.email || 'unknown',
+                name: client?.name || 'unknown',
+                status: state,
+                progress: job.progress(),
+                categories: client?.categorization?.data || null,
+            };
+        }));
+        return {
+            uploadId,
+            total,
+            waiting,
+            active,
+            completed,
+            failed,
+            progress,
+            clients: clientsData,
+        };
+    }
+    async findClientsWithoutCategories(uploadId) {
+        return this.prisma.client.findMany({
+            where: {
+                uploadId,
+                categorization: null,
+            },
+        });
+    }
+    async getAllCategorizations(limit = 20, offset = 0) {
+        const [categorizations, total] = await Promise.all([
+            this.prisma.categorization.findMany({
+                take: limit,
+                skip: offset,
+                orderBy: { processedAt: 'desc' },
+                include: {
+                    client: {
+                        select: {
+                            id: true,
+                            name: true,
+                            email: true,
+                            seller: true,
+                            closed: true,
+                            meetingDate: true,
+                        },
+                    },
+                },
+            }),
+            this.prisma.categorization.count(),
+        ]);
+        return {
+            categorizations: categorizations.map((cat) => ({
+                id: cat.id,
+                clientId: cat.clientId,
+                clientName: cat.client.name,
+                clientEmail: cat.client.email,
+                seller: cat.client.seller,
+                closed: cat.client.closed,
+                meetingDate: cat.client.meetingDate,
+                data: cat.data,
+                processedAt: cat.processedAt,
+            })),
+            total,
+            limit,
+            offset,
+        };
+    }
 };
 exports.CategorizationService = CategorizationService;
 exports.CategorizationService = CategorizationService = CategorizationService_1 = __decorate([
@@ -79,102 +166,4 @@ exports.CategorizationService = CategorizationService = CategorizationService_1 
     __param(1, (0, bull_1.InjectQueue)(queue_constants_1.CATEGORIZATION_QUEUE)),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService, Object])
 ], CategorizationService);
-return {
-    jobsCreated: jobs.length,
-    jobIds: jobs.map((j) => j.id),
-};
-async;
-getUploadProgress(uploadId, string);
-Promise < categorization_dto_1.ProgressResponseDto > {
-    const: jobs = await this.categorizationQueue.getJobs([
-        'waiting',
-        'active',
-        'completed',
-        'failed',
-    ]),
-    const: uploadJobs = jobs.filter((job) => job.data.uploadId === uploadId),
-    const: jobStates = await Promise.all(uploadJobs.map((j) => j.getState())),
-    const: waiting = jobStates.filter((state) => state === 'waiting').length,
-    const: active = jobStates.filter((state) => state === 'active').length,
-    const: completed = jobStates.filter((state) => state === 'completed').length,
-    const: failed = jobStates.filter((state) => state === 'failed').length,
-    const: total = uploadJobs.length,
-    const: progress = total > 0 ? Math.round((completed / total) * 100) : 0,
-    const: clientsData = await Promise.all(uploadJobs.slice(0, 20).map(async (job) => {
-        const state = await job.getState();
-        const client = await this.prisma.client.findUnique({
-            where: { id: job.data.clientId },
-            include: { categorization: true },
-        });
-        return {
-            jobId: job.id,
-            clientId: job.data.clientId,
-            email: client?.email || 'unknown',
-            name: client?.name || 'unknown',
-            status: state,
-            progress: job.progress(),
-            categories: client?.categorization?.data || null,
-        };
-    })),
-    return: {
-        uploadId,
-        total,
-        waiting,
-        active,
-        completed,
-        failed,
-        progress,
-        clients: clientsData,
-    }
-};
-async;
-findClientsWithoutCategories(uploadId, string);
-{
-    return this.prisma.client.findMany({
-        where: {
-            uploadId,
-            categorization: null,
-        },
-    });
-}
-async;
-getAllCategorizations(limit, number = 20, offset, number = 0);
-{
-    const [categorizations, total] = await Promise.all([
-        this.prisma.categorization.findMany({
-            take: limit,
-            skip: offset,
-            orderBy: { processedAt: 'desc' },
-            include: {
-                client: {
-                    select: {
-                        id: true,
-                        name: true,
-                        email: true,
-                        seller: true,
-                        closed: true,
-                        meetingDate: true,
-                    },
-                },
-            },
-        }),
-        this.prisma.categorization.count(),
-    ]);
-    return {
-        categorizations: categorizations.map((cat) => ({
-            id: cat.id,
-            clientId: cat.clientId,
-            clientName: cat.client.name,
-            clientEmail: cat.client.email,
-            seller: cat.client.seller,
-            closed: cat.client.closed,
-            meetingDate: cat.client.meetingDate,
-            data: cat.data,
-            processedAt: cat.processedAt,
-        })),
-        total,
-        limit,
-        offset,
-    };
-}
 //# sourceMappingURL=categorization.service.js.map

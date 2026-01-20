@@ -78,12 +78,6 @@ export class CategorizationService {
     }
   }
 
-    return {
-      jobsCreated: jobs.length,
-      jobIds: jobs.map((j) => j.id),
-    };
-  }
-
   async getUploadProgress(uploadId: string): Promise<ProgressResponseDto> {
     const jobs = await this.categorizationQueue.getJobs([
       'waiting',
