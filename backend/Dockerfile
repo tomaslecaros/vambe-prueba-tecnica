@@ -1,5 +1,8 @@
 FROM node:20-alpine AS builder
 
+# Instalar OpenSSL para Prisma
+RUN apk add --no-cache openssl
+
 WORKDIR /app
 
 # Copiar archivos de dependencias del backend
@@ -21,6 +24,9 @@ RUN npm run build
 
 # Producción
 FROM node:20-alpine
+
+# Instalar OpenSSL para Prisma en runtime
+RUN apk add --no-cache openssl
 
 WORKDIR /app
 
