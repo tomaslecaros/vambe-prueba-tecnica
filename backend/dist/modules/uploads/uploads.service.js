@@ -127,19 +127,26 @@ let UploadsService = UploadsService_1 = class UploadsService {
                     processedRows: processedCount,
                 },
             });
+            console.log(`[DEBUG-UPLOAD] Checking if categorization needed: processedCount=${processedCount}, uploadId=${uploadId}`);
             if (processedCount > 0) {
+                console.log(`[DEBUG-UPLOAD] Attempting to queue categorization for ${processedCount} new clients from upload ${uploadId}`);
                 this.logger.log(`🔄 [UPLOAD] Queueing categorization for ${processedCount} new clients`);
                 this.categorizationService
                     .queueCategorizationForUpload(uploadId)
                     .then((result) => {
+                    console.log(`[DEBUG-UPLOAD] ✅ Successfully queued ${result.jobsCreated} categorization jobs for upload ${uploadId}`);
                     this.logger.log(`✅ [UPLOAD] Categorization queued successfully: ${result.jobsCreated} jobs created`);
                 })
                     .catch((error) => {
+                    console.error(`[DEBUG-UPLOAD] ❌ FAILED to queue categorization for upload ${uploadId}:`, error);
+                    console.error(`[DEBUG-UPLOAD] Error message: ${error.message}`);
+                    console.error(`[DEBUG-UPLOAD] Error stack:`, error.stack);
                     this.logger.error(`❌ [UPLOAD] Categorization queue error:`, error);
                     this.logger.error(`❌ [UPLOAD] Error details:`, error.message, error.stack);
                 });
             }
             else {
+                console.log(`[DEBUG-UPLOAD] No clients to categorize (processedCount=${processedCount})`);
                 this.logger.log('ℹ️ [UPLOAD] No new clients to categorize');
             }
             return {
