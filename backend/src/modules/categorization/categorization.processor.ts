@@ -16,13 +16,19 @@ export class CategorizationProcessor {
   constructor(
     private prisma: PrismaService,
     private llmService: LlmService,
-  ) {}
+  ) {
+    console.log(`[DEBUG-PROCESSOR] ✅ CategorizationProcessor initialized and listening to queue: ${CATEGORIZATION_QUEUE}`);
+    this.logger.log(`Processor initialized for queue: ${CATEGORIZATION_QUEUE}`);
+  }
 
   @Process({ concurrency: MAX_CONCURRENCY })
   async handleCategorization(job: Job<CategorizationJobDto>) {
     const { clientId, uploadId } = job.data;
 
+    console.log(`[DEBUG-PROCESSOR] 🚀 Job ${job.id} received: clientId=${clientId}, uploadId=${uploadId}`);
+    
     try {
+      console.log(`[DEBUG-PROCESSOR] Starting processing job ${job.id} for client ${clientId}`);
       this.logger.log(`🚀 [QUEUE] Starting job ${job.id} for client ${clientId}`);
 
       const client = await this.prisma.client.findUnique({
@@ -57,6 +63,7 @@ export class CategorizationProcessor {
 
       await job.progress(100);
 
+      console.log(`[DEBUG-PROCESSOR] ✅ Job ${job.id} completed successfully for client ${client.email}`);
       this.logger.log(`✓ Categorized ${client.email}: ${categories.industry}`);
 
       return {
@@ -65,6 +72,10 @@ export class CategorizationProcessor {
         categories,
       };
     } catch (error) {
+      console.error(`[DEBUG-PROCESSOR] ❌ Job ${job.id} FAILED for client ${clientId}:`, error);
+      console.error(`[DEBUG-PROCESSOR] Error type: ${error.constructor.name}`);
+      console.error(`[DEBUG-PROCESSOR] Error message: ${error.message}`);
+      console.error(`[DEBUG-PROCESSOR] Error stack:`, error.stack);
       this.logger.error(
         `❌ [QUEUE] Failed to categorize client ${clientId}: ${error.message}`,
       );
