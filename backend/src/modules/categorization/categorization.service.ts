@@ -18,64 +18,45 @@ export class CategorizationService {
   ) {}
 
   async queueCategorizationForUpload(uploadId: string) {
-    try {
-      console.log(`[DEBUG-CATEGORIZATION] 🔍 Starting queue process for upload: ${uploadId}`);
-      this.logger.log(`🔍 [CATEGORIZATION] Starting queue for upload: ${uploadId}`);
-      
-      console.log(`[DEBUG-CATEGORIZATION] Searching for clients without categorization for upload ${uploadId}...`);
-      const clientsWithoutCategories =
-        await this.findClientsWithoutCategories(uploadId);
-      const total = clientsWithoutCategories.length;
-      console.log(`[DEBUG-CATEGORIZATION] Found ${total} clients without categorization for upload ${uploadId}`);
+    const clientsWithoutCategories =
+      await this.findClientsWithoutCategories(uploadId);
+    const total = clientsWithoutCategories.length;
 
-      if (total === 0) {
-        console.log(`[DEBUG-CATEGORIZATION] No clients found to categorize for upload ${uploadId}`);
-        this.logger.log(`ℹ️ [CATEGORIZATION] No clients to categorize for upload ${uploadId}`);
-        return { jobsCreated: 0 };
-      }
-
-      this.logger.log(
-        `📝 [CATEGORIZATION] Queueing ${total} clients for categorization (uploadId: ${uploadId})`,
-      );
-
-      console.log(`[DEBUG-CATEGORIZATION] Attempting to add ${total} jobs to Redis queue...`);
-      const jobs = await Promise.all(
-        clientsWithoutCategories.map((client) =>
-          this.categorizationQueue.add(
-            {
-              clientId: client.id,
-              uploadId,
-            } as CategorizationJobDto,
-            {
-              attempts: 3,
-              backoff: {
-                type: 'exponential',
-                delay: 2000,
-              },
-              removeOnComplete: false,
-              removeOnFail: false,
-            },
-          ),
-        ),
-      );
-
-      console.log(`[DEBUG-CATEGORIZATION] ✅ Successfully added ${jobs.length} jobs to Redis queue for upload ${uploadId}`);
-      this.logger.log(`✅ [CATEGORIZATION] Created ${jobs.length} jobs for upload ${uploadId}`);
-      this.logger.log(`📋 [CATEGORIZATION] Job IDs: ${jobs.map((j) => j.id).join(', ')}`);
-      
-      return {
-        jobsCreated: jobs.length,
-        jobIds: jobs.map((j) => j.id),
-      };
-    } catch (error) {
-      console.error(`[DEBUG-CATEGORIZATION] ❌ ERROR in queueCategorizationForUpload for upload ${uploadId}:`, error);
-      console.error(`[DEBUG-CATEGORIZATION] Error type: ${error.constructor.name}`);
-      console.error(`[DEBUG-CATEGORIZATION] Error message: ${error.message}`);
-      console.error(`[DEBUG-CATEGORIZATION] Error stack:`, error.stack);
-      this.logger.error(`❌ [CATEGORIZATION] Error queueing jobs for upload ${uploadId}:`, error);
-      this.logger.error(`❌ [CATEGORIZATION] Error details:`, error.message, error.stack);
-      throw error;
+    if (total === 0) {
+      this.logger.log('No clients to categorize');
+      return { jobsCreated: 0 };
     }
+
+    this.logger.log(
+      `Queueing ${total} clients for categorization (uploadId: ${uploadId})`,
+    );
+
+    const jobs = await Promise.all(
+      clientsWithoutCategories.map((client) =>
+        this.categorizationQueue.add(
+          {
+            clientId: client.id,
+            uploadId,
+          } as CategorizationJobDto,
+          {
+            attempts: 3,
+            backoff: {
+              type: 'exponential',
+              delay: 2000,
+            },
+            removeOnComplete: false,
+            removeOnFail: false,
+          },
+        ),
+      ),
+    );
+
+    this.logger.log(`Created ${jobs.length} jobs for upload ${uploadId}`);
+
+    return {
+      jobsCreated: jobs.length,
+      jobIds: jobs.map((j) => j.id),
+    };
   }
 
   async getUploadProgress(uploadId: string): Promise<ProgressResponseDto> {

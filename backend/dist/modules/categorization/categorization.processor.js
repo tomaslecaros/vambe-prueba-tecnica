@@ -23,23 +23,17 @@ let CategorizationProcessor = CategorizationProcessor_1 = class CategorizationPr
     constructor(prisma, llmService) {
         this.prisma = prisma;
         this.llmService = llmService;
-        console.log(`[DEBUG-PROCESSOR] ✅ CategorizationProcessor initialized and listening to queue: ${queue_constants_1.CATEGORIZATION_QUEUE}`);
-        this.logger.log(`Processor initialized for queue: ${queue_constants_1.CATEGORIZATION_QUEUE}`);
     }
     async handleCategorization(job) {
         const { clientId, uploadId } = job.data;
-        console.log(`[DEBUG-PROCESSOR] 🚀 Job ${job.id} received: clientId=${clientId}, uploadId=${uploadId}`);
         try {
-            console.log(`[DEBUG-PROCESSOR] Starting processing job ${job.id} for client ${clientId}`);
-            this.logger.log(`🚀 [QUEUE] Starting job ${job.id} for client ${clientId}`);
+            this.logger.log(`Processing job ${job.id} for client ${clientId}`);
             const client = await this.prisma.client.findUnique({
                 where: { id: clientId },
             });
             if (!client) {
-                this.logger.error(`❌ [QUEUE] Client ${clientId} not found`);
                 throw new Error(`Client ${clientId} not found`);
             }
-            this.logger.log(`📝 [QUEUE] Processing client: ${client.email}`);
             await job.progress(30);
             const categories = await this.llmService.extractCategoriesFromTranscription(client.transcription);
             await job.progress(70);
@@ -53,8 +47,7 @@ let CategorizationProcessor = CategorizationProcessor_1 = class CategorizationPr
                 },
             });
             await job.progress(100);
-            console.log(`[DEBUG-PROCESSOR] ✅ Job ${job.id} completed successfully for client ${client.email}`);
-            this.logger.log(`✓ Categorized ${client.email}: ${categories.industry}`);
+            this.logger.log(`Categorized ${client.email}: ${categories.industry}`);
             return {
                 clientId,
                 email: client.email,
@@ -62,12 +55,7 @@ let CategorizationProcessor = CategorizationProcessor_1 = class CategorizationPr
             };
         }
         catch (error) {
-            console.error(`[DEBUG-PROCESSOR] ❌ Job ${job.id} FAILED for client ${clientId}:`, error);
-            console.error(`[DEBUG-PROCESSOR] Error type: ${error.constructor.name}`);
-            console.error(`[DEBUG-PROCESSOR] Error message: ${error.message}`);
-            console.error(`[DEBUG-PROCESSOR] Error stack:`, error.stack);
-            this.logger.error(`❌ [QUEUE] Failed to categorize client ${clientId}: ${error.message}`);
-            this.logger.error(`❌ [QUEUE] Error stack:`, error.stack);
+            this.logger.error(`Failed to categorize client ${clientId}: ${error.message}`);
             throw error;
         }
     }

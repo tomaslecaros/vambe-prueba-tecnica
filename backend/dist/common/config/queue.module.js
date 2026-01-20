@@ -35,17 +35,14 @@ exports.QueueModule = QueueModule = __decorate([
                                     rejectUnauthorized: false,
                                 };
                             }
-                            console.log(`✅ [REDIS] Connected using REDIS_URL: ${url.hostname}:${redisConfig.port}`);
                             return { redis: redisConfig };
                         }
                         catch (error) {
-                            console.warn('⚠️ [REDIS] Error parsing REDIS_URL, falling back to individual vars', error);
                         }
                     }
                     const host = configService.get('REDIS_HOST', 'localhost');
                     const port = configService.get('REDIS_PORT', 6379);
                     const password = configService.get('REDIS_PASSWORD');
-                    console.log(`✅ [REDIS] Connected using individual vars: ${host}:${port}`);
                     return {
                         redis: {
                             host,
