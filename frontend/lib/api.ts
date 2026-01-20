@@ -2,10 +2,6 @@ import axios, { AxiosError } from 'axios';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
-// DEBUG: Log la URL que estamos usando
-console.log('🔍 [FRONTEND] API_URL configurada:', API_URL);
-console.log('🔍 [FRONTEND] NEXT_PUBLIC_API_URL env:', process.env.NEXT_PUBLIC_API_URL);
-
 export const api = axios.create({
   baseURL: API_URL,
   headers: {
@@ -13,34 +9,10 @@ export const api = axios.create({
   },
 });
 
-// DEBUG: Log cuando se hace una request
-api.interceptors.request.use(
-  (config) => {
-    console.log('🔍 [FRONTEND] Haciendo request a:', config.baseURL + config.url);
-    return config;
-  },
-  (error) => {
-    console.error('🔍 [FRONTEND] Error en request:', error);
-    return Promise.reject(error);
-  }
-);
-
 // Interceptor para manejar errores globalmente
 api.interceptors.response.use(
-  (response) => {
-    console.log('✅ [FRONTEND] Response recibida:', response.config.url, response.status);
-    return response;
-  },
+  (response) => response,
   (error: AxiosError<any>) => {
-    // DEBUG: Log detallado del error
-    console.error('❌ [FRONTEND] Error en response:');
-    console.error('  - URL intentada:', error.config?.baseURL + error.config?.url);
-    console.error('  - Método:', error.config?.method);
-    console.error('  - Status:', error.response?.status);
-    console.error('  - Mensaje:', error.message);
-    console.error('  - Código:', error.code);
-    console.error('  - Detalles:', error.response?.data || 'No response data');
-
     // Extraer mensaje de error del backend
     let errorMessage = 'Error desconocido al procesar la solicitud';
 
@@ -58,6 +30,12 @@ api.interceptors.response.use(
     // Crear un error estructurado
     const customError = new Error(errorMessage);
     customError.name = 'APIError';
+
+    // En desarrollo, solo loguear errores 500 (los demás son esperados)
+    if (process.env.NODE_ENV === 'development' && error.response?.status !== 500) {
+      // Suprimir el log en consola para errores 400 esperados
+      return Promise.reject(customError);
+    }
 
     return Promise.reject(customError);
   },
