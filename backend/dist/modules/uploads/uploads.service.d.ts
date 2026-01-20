@@ -7,12 +7,12 @@ export declare class UploadsService {
     constructor(prisma: PrismaService, categorizationService: CategorizationService);
     createUpload(filename: string, totalRows: number): Promise<{
         id: string;
-        createdAt: Date;
-        status: import(".prisma/client").$Enums.UploadStatus;
         filename: string;
+        status: import(".prisma/client").$Enums.UploadStatus;
         totalRows: number;
         processedRows: number;
         errors: import("@prisma/client/runtime/library").JsonValue | null;
+        createdAt: Date;
         completedAt: Date | null;
     }>;
     processFile(uploadId: string, fileBuffer: Buffer): Promise<{
@@ -46,12 +46,12 @@ export declare class UploadsService {
     getUploads(limit?: number, offset?: number, status?: string): Promise<{
         uploads: {
             id: string;
-            createdAt: Date;
-            status: import(".prisma/client").$Enums.UploadStatus;
             filename: string;
+            status: import(".prisma/client").$Enums.UploadStatus;
             totalRows: number;
             processedRows: number;
             errors: import("@prisma/client/runtime/library").JsonValue | null;
+            createdAt: Date;
             completedAt: Date | null;
         }[];
         total: number;

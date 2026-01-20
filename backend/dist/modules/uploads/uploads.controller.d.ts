@@ -7,12 +7,12 @@ export declare class UploadsController {
     getUploads(limit?: string, offset?: string, status?: string): Promise<{
         uploads: {
             id: string;
-            createdAt: Date;
-            status: import(".prisma/client").$Enums.UploadStatus;
             filename: string;
+            status: import(".prisma/client").$Enums.UploadStatus;
             totalRows: number;
             processedRows: number;
             errors: import("@prisma/client/runtime/library").JsonValue | null;
+            createdAt: Date;
             completedAt: Date | null;
         }[];
         total: number;
