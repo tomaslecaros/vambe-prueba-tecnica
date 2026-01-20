@@ -2,6 +2,10 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
+# Variable de entorno para el build (se pasa como ARG)
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+
 # Copiar package files del frontend
 COPY frontend/package*.json ./
 
@@ -11,7 +15,7 @@ RUN npm ci
 # Copiar código del frontend
 COPY frontend/ ./
 
-# Build
+# Build con la variable de entorno
 RUN npm run build
 
 # Producción
