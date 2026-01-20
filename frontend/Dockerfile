@@ -22,9 +22,11 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 # Copiar archivos necesarios del build
-COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
+
+# Crear public folder (puede estar vacía)
+RUN mkdir -p ./public
 
 EXPOSE 3000
 
