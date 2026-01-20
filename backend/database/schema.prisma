@@ -1,0 +1,63 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UploadStatus {
+  pending
+  processing
+  completed
+  failed
+}
+
+model Upload {
+  id            String       @id @default(uuid())
+  filename      String
+  status        UploadStatus @default(pending)
+  totalRows     Int          @map("total_rows")
+  processedRows Int          @default(0) @map("processed_rows")
+  errors        Json?
+  createdAt     DateTime     @default(now()) @map("created_at")
+  completedAt   DateTime?    @map("completed_at")
+
+  clients Client[]
+
+  @@map("uploads")
+}
+
+model Client {
+  id            String   @id @default(uuid())
+  uploadId      String   @map("upload_id")
+  name          String
+  email         String
+  phone         String
+  meetingDate   DateTime @map("meeting_date")
+  seller        String
+  closed        Boolean
+  transcription String
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  upload         Upload          @relation(fields: [uploadId], references: [id])
+  categorization Categorization?
+
+  @@unique([email, phone])
+  @@map("clients")
+}
+
+model Categorization {
+  id            String   @id @default(uuid())
+  clientId      String   @unique @map("client_id")
+  data          Json
+  llmProvider   String   @map("llm_provider")
+  model         String
+  promptVersion String   @map("prompt_version")
+  processedAt   DateTime @default(now()) @map("processed_at")
+
+  client Client @relation(fields: [clientId], references: [id])
+
+  @@map("categorizations")
+}
