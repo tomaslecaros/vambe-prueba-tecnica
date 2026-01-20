@@ -27,13 +27,15 @@ let CategorizationProcessor = CategorizationProcessor_1 = class CategorizationPr
     async handleCategorization(job) {
         const { clientId, uploadId } = job.data;
         try {
-            this.logger.log(`Processing job ${job.id} for client ${clientId}`);
+            this.logger.log(`🚀 [QUEUE] Starting job ${job.id} for client ${clientId}`);
             const client = await this.prisma.client.findUnique({
                 where: { id: clientId },
             });
             if (!client) {
+                this.logger.error(`❌ [QUEUE] Client ${clientId} not found`);
                 throw new Error(`Client ${clientId} not found`);
             }
+            this.logger.log(`📝 [QUEUE] Processing client: ${client.email}`);
             await job.progress(30);
             const categories = await this.llmService.extractCategoriesFromTranscription(client.transcription);
             await job.progress(70);
@@ -55,7 +57,8 @@ let CategorizationProcessor = CategorizationProcessor_1 = class CategorizationPr
             };
         }
         catch (error) {
-            this.logger.error(`✗ Failed to categorize client ${clientId}: ${error.message}`);
+            this.logger.error(`❌ [QUEUE] Failed to categorize client ${clientId}: ${error.message}`);
+            this.logger.error(`❌ [QUEUE] Error stack:`, error.stack);
             throw error;
         }
     }

@@ -128,12 +128,19 @@ let UploadsService = UploadsService_1 = class UploadsService {
                 },
             });
             if (processedCount > 0) {
+                this.logger.log(`🔄 [UPLOAD] Queueing categorization for ${processedCount} new clients`);
                 this.categorizationService
                     .queueCategorizationForUpload(uploadId)
-                    .catch((error) => console.error('Categorization queue error:', error));
+                    .then((result) => {
+                    this.logger.log(`✅ [UPLOAD] Categorization queued successfully: ${result.jobsCreated} jobs created`);
+                })
+                    .catch((error) => {
+                    this.logger.error(`❌ [UPLOAD] Categorization queue error:`, error);
+                    this.logger.error(`❌ [UPLOAD] Error details:`, error.message, error.stack);
+                });
             }
             else {
-                this.logger.log('No new clients to categorize');
+                this.logger.log('ℹ️ [UPLOAD] No new clients to categorize');
             }
             return {
                 success: true,
