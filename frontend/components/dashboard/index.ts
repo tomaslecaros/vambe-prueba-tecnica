@@ -5,4 +5,4 @@ export { IndustryConversionChart } from './industry-conversion-chart';
 export { SellerConversionChart } from './seller-conversion-chart';
 export { SellerExpertiseTable } from './seller-expertise-table';
 export { DiscoverySourceChart } from './discovery-source-chart';
-export { PainPointIndustryHeatmap } from './pain-point-industry-heatmap';
+export { CrossHeatmap, type HeatmapCell, type HeatmapDimension, type HeatmapDataSet } from './cross-heatmap';

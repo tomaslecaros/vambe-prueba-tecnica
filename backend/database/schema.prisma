@@ -62,3 +62,21 @@ model Categorization {
 
   @@map("categorizations")
 }
+
+model PredictionModel {
+  id                 String    @id @default(uuid())
+  trained            Boolean   @default(false)
+  samplesUsed        Int       @default(0) @map("samples_used")
+  accuracy           Float?
+  modelData          Json?     @map("model_data")
+  trainedAt          DateTime? @map("trained_at")
+  isTraining         Boolean   @default(false) @map("is_training")
+  trainingJobId      String?   @map("training_job_id")
+  trainingStartedAt  DateTime? @map("training_started_at")
+  trainingProgress   Int?      @default(0) @map("training_progress")
+  lastError          String?   @map("last_error")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  @@map("prediction_models")
+}

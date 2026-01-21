@@ -13,12 +13,11 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   CategorizationsTable,
   ConversionKpis,
-  PainPointConversionChart,
   IndustryConversionChart,
   SellerConversionChart,
   SellerExpertiseTable,
   DiscoverySourceChart,
-  PainPointIndustryHeatmap,
+  CrossHeatmap,
 } from '@/components/dashboard';
 
 export default function DashboardPage() {
@@ -51,8 +50,8 @@ export default function DashboardPage() {
           <Skeleton className="h-8 w-48 mb-2" />
           <Skeleton className="h-4 w-96" />
         </div>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {[1, 2, 3, 4].map((i) => (
+        <div className="grid gap-4 md:grid-cols-3">
+          {[1, 2, 3].map((i) => (
             <Card key={i} className="p-6">
               <Skeleton className="h-4 w-32 mb-2" />
               <Skeleton className="h-8 w-20 mb-1" />
@@ -117,11 +116,10 @@ export default function DashboardPage() {
       </div>
 
       <Tabs defaultValue="resumen" className="w-full">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="resumen">Resumen</TabsTrigger>
           <TabsTrigger value="vendedores">Por Vendedor</TabsTrigger>
           <TabsTrigger value="categorias">Por Categoría</TabsTrigger>
-          <TabsTrigger value="pain-points">Por Pain Point</TabsTrigger>
           <TabsTrigger value="todas">Todas</TabsTrigger>
         </TabsList>
 
@@ -129,7 +127,8 @@ export default function DashboardPage() {
           <ConversionKpis
             kpis={dashboards.kpis}
             topSeller={dashboards.closureBySeller?.[0]}
-            topIndustry={dashboards.closureByIndustry?.[0]}
+            closureByIndustry={dashboards.closureByIndustry}
+            closureByDiscoverySource={dashboards.closureByDiscoverySource}
           />
         </TabsContent>
 
@@ -138,6 +137,58 @@ export default function DashboardPage() {
             <SellerConversionChart data={dashboards.closureBySeller} />
             <SellerExpertiseTable data={dashboards.sellerExpertiseByIndustry} />
           </div>
+          <CrossHeatmap
+            title="Matriz de Cierre por Vendedor"
+            description="Analiza el rendimiento de cada vendedor en diferentes dimensiones"
+            dataSets={[
+              {
+                rowDimension: 'seller',
+                colDimension: 'industry',
+                data: dashboards.sellerExpertiseByIndustry.flatMap((seller) =>
+                  seller.expertise.map((exp) => ({
+                    row: seller.sellerName,
+                    col: exp.industry,
+                    value: exp.closureRate,
+                    total: exp.totalDeals,
+                    closed: exp.closedDeals,
+                  }))
+                ),
+              },
+              {
+                rowDimension: 'seller',
+                colDimension: 'discoverySource',
+                data: dashboards.sellerByDiscoverySource?.matrix.map((item) => ({
+                  row: item.seller,
+                  col: item.dimension,
+                  value: item.closureRate,
+                  total: item.total,
+                  closed: item.closed,
+                })) || [],
+              },
+              {
+                rowDimension: 'seller',
+                colDimension: 'painPoint',
+                data: dashboards.sellerByPainPoint?.matrix.map((item) => ({
+                  row: item.seller,
+                  col: item.dimension,
+                  value: item.closureRate,
+                  total: item.total,
+                  closed: item.closed,
+                })) || [],
+              },
+            ]}
+            rowDimensions={[
+              { key: 'seller', label: 'Vendedor' },
+            ]}
+            colDimensions={[
+              { key: 'industry', label: 'Industria' },
+              { key: 'discoverySource', label: 'Fuente' },
+              { key: 'painPoint', label: 'Pain Point' },
+            ]}
+            defaultRowDimension="seller"
+            defaultColDimension="industry"
+            valueLabel="Cierre"
+          />
         </TabsContent>
 
         <TabsContent value="categorias" className="space-y-6 mt-6">
@@ -145,12 +196,6 @@ export default function DashboardPage() {
             <IndustryConversionChart data={dashboards.closureByIndustry} />
             <DiscoverySourceChart data={dashboards.closureByDiscoverySource} />
           </div>
-          <PainPointIndustryHeatmap data={dashboards.painPointIndustryMatrix} />
-        </TabsContent>
-
-        <TabsContent value="pain-points" className="space-y-6 mt-6">
-          <PainPointConversionChart data={dashboards.closureByPainPoint} />
-          {/* TODO: Agregar más análisis de pain points */}
         </TabsContent>
 
         <TabsContent value="todas" className="space-y-6 mt-6">
