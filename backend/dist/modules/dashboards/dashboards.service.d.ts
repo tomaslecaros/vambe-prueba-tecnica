@@ -11,4 +11,5 @@ export declare class DashboardsService {
     private calculateClosureByDiscoverySource;
     private calculatePainPointIndustryMatrix;
     private calculateSellerExpertiseByIndustry;
+    private calculateSellerCrossMatrix;
 }

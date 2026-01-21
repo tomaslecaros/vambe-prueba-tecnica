@@ -6,8 +6,8 @@ import { UploadsModule } from '@modules/uploads/uploads.module';
 import { LlmModule } from '@modules/llm/llm.module';
 import { CategorizationModule } from '@modules/categorization/categorization.module';
 import { ClientsModule } from '@modules/clients/clients.module';
-import { AnalyticsModule } from '@modules/analytics/analytics.module';
 import { DashboardsModule } from '@modules/dashboards/dashboards.module';
+import { PredictionModule } from '@modules/prediction/prediction.module';
 
 @Module({
   imports: [
@@ -20,8 +20,8 @@ import { DashboardsModule } from '@modules/dashboards/dashboards.module';
     LlmModule,
     CategorizationModule,
     ClientsModule,
-    AnalyticsModule,
     DashboardsModule,
+    PredictionModule,
   ],
 })
 export class AppModule {}

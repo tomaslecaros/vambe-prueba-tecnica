@@ -5,19 +5,13 @@ import { ChartContainer, ChartTooltip } from '@/components/ui/chart';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Cell, LabelList } from 'recharts';
 import type { ClosureByItem } from '@/types';
 import { AlertCircle } from 'lucide-react';
+import { CHART_COLORS_ARRAY, CHART_COLORS } from '@/lib/chart-colors';
+
+const MAX_INDUSTRIES_DISPLAY = 10;
 
 interface IndustryConversionChartProps {
   data: ClosureByItem[];
 }
-
-// Colores consistentes usando la paleta de chart
-const CHART_COLORS = [
-  'var(--chart-1)',
-  'var(--chart-2)',
-  'var(--chart-3)',
-  'var(--chart-4)',
-  'var(--chart-5)',
-];
 
 export function IndustryConversionChart({ data }: IndustryConversionChartProps) {
   if (!data || data.length === 0) {
@@ -39,8 +33,8 @@ export function IndustryConversionChart({ data }: IndustryConversionChartProps) 
     );
   }
 
-  // Mostrar todas las industrias, ordenadas por tasa de cierre
-  const chartData = [...data]
+  // Ordenar por tasa de cierre y limitar
+  const allSortedData = [...data]
     .sort((a, b) => b.closureRate - a.closureRate)
     .map((item) => ({
       name: item.name,
@@ -49,7 +43,10 @@ export function IndustryConversionChart({ data }: IndustryConversionChartProps) 
       closed: item.closed,
     }));
 
-  // Altura dinámica basada en cantidad de industrias
+  const chartData = allSortedData.slice(0, MAX_INDUSTRIES_DISPLAY);
+  const remainingIndustries = allSortedData.length - MAX_INDUSTRIES_DISPLAY;
+
+  // Altura dinámica basada en cantidad de industrias mostradas
   const chartHeight = Math.max(300, chartData.length * 40);
 
   const chartConfig = {
@@ -63,7 +60,8 @@ export function IndustryConversionChart({ data }: IndustryConversionChartProps) 
       <CardHeader>
         <CardTitle>Cierre por Industria</CardTitle>
         <CardDescription>
-          Todas las industrias ordenadas por tasa de cierre
+          Top {Math.min(data.length, MAX_INDUSTRIES_DISPLAY)} industrias por tasa de cierre
+          {remainingIndustries > 0 && ` (+${remainingIndustries} más)`}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -94,7 +92,7 @@ export function IndustryConversionChart({ data }: IndustryConversionChartProps) 
                       <div className="rounded-lg border bg-background p-3 shadow-md">
                         <p className="font-semibold">{item.name}</p>
                         <p className="text-sm">
-                          <span className="font-medium" style={{ color: 'var(--chart-1)' }}>
+                          <span className="font-medium" style={{ color: CHART_COLORS.chart1 }}>
                             {item.closureRate.toFixed(1)}%
                           </span> de cierre
                         </p>
@@ -114,7 +112,7 @@ export function IndustryConversionChart({ data }: IndustryConversionChartProps) 
                 {chartData.map((_, index) => (
                   <Cell
                     key={`cell-${index}`}
-                    fill={CHART_COLORS[index % CHART_COLORS.length]}
+                    fill={CHART_COLORS_ARRAY[index % CHART_COLORS_ARRAY.length]}
                   />
                 ))}
                 <LabelList

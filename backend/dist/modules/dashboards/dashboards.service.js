@@ -31,6 +31,8 @@ let DashboardsService = class DashboardsService {
         const closureByDiscoverySource = this.calculateClosureByDiscoverySource(categorizedClients);
         const painPointIndustryMatrix = this.calculatePainPointIndustryMatrix(categorizedClients);
         const sellerExpertiseByIndustry = this.calculateSellerExpertiseByIndustry(clientsWithCategories);
+        const sellerByDiscoverySource = this.calculateSellerCrossMatrix(clientsWithCategories, 'discovery_source');
+        const sellerByPainPoint = this.calculateSellerCrossMatrix(clientsWithCategories, 'main_pain_point');
         return {
             kpis,
             closureBySeller,
@@ -39,6 +41,8 @@ let DashboardsService = class DashboardsService {
             closureByDiscoverySource,
             painPointIndustryMatrix,
             sellerExpertiseByIndustry,
+            sellerByDiscoverySource,
+            sellerByPainPoint,
         };
     }
     calculateKpis(allClients, categorizedClients) {
@@ -231,6 +235,50 @@ let DashboardsService = class DashboardsService {
                 expertise,
             };
         });
+    }
+    calculateSellerCrossMatrix(clients, dimensionField) {
+        const sellersSet = new Set();
+        const dimensionsSet = new Set();
+        const matrixData = {};
+        clients.forEach((client) => {
+            const seller = client.seller || 'Sin asignar';
+            const dimension = client.categorization?.data?.[dimensionField] || 'No especificado';
+            sellersSet.add(seller);
+            dimensionsSet.add(dimension);
+            if (!matrixData[seller]) {
+                matrixData[seller] = {};
+            }
+            if (!matrixData[seller][dimension]) {
+                matrixData[seller][dimension] = { total: 0, closed: 0 };
+            }
+            matrixData[seller][dimension].total++;
+            if (client.closed) {
+                matrixData[seller][dimension].closed++;
+            }
+        });
+        const sellers = Array.from(sellersSet).sort();
+        const dimensions = Array.from(dimensionsSet).sort();
+        const matrix = [];
+        for (const seller of sellers) {
+            for (const dimension of dimensions) {
+                const stats = matrixData[seller]?.[dimension] || { total: 0, closed: 0 };
+                const closureRate = stats.total > 0
+                    ? Math.round((stats.closed / stats.total) * 1000) / 10
+                    : 0;
+                matrix.push({
+                    seller,
+                    dimension,
+                    closureRate,
+                    total: stats.total,
+                    closed: stats.closed,
+                });
+            }
+        }
+        return {
+            sellers,
+            dimensions,
+            matrix,
+        };
     }
 };
 exports.DashboardsService = DashboardsService;

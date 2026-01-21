@@ -85,7 +85,7 @@ export function SellerExpertiseTable({ data }: SellerExpertiseTableProps) {
               <div className="text-right">
                 {seller.closureRate > 0 ? (
                   <>
-                    <p className="text-lg font-bold" style={{ color: 'var(--chart-1)' }}>
+                    <p className="text-lg font-bold text-chart-1">
                       {seller.closureRate.toFixed(1)}%
                     </p>
                     <p className="text-xs text-muted-foreground">cierre</p>

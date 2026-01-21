@@ -15,8 +15,8 @@ const uploads_module_1 = require("./modules/uploads/uploads.module");
 const llm_module_1 = require("./modules/llm/llm.module");
 const categorization_module_1 = require("./modules/categorization/categorization.module");
 const clients_module_1 = require("./modules/clients/clients.module");
-const analytics_module_1 = require("./modules/analytics/analytics.module");
 const dashboards_module_1 = require("./modules/dashboards/dashboards.module");
+const prediction_module_1 = require("./modules/prediction/prediction.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -32,8 +32,8 @@ exports.AppModule = AppModule = __decorate([
             llm_module_1.LlmModule,
             categorization_module_1.CategorizationModule,
             clients_module_1.ClientsModule,
-            analytics_module_1.AnalyticsModule,
             dashboards_module_1.DashboardsModule,
+            prediction_module_1.PredictionModule,
         ],
     })
 ], AppModule);

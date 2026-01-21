@@ -155,58 +155,220 @@
 - `GET /api/analytics/conversion-rates` - Tasas de conversión
 
 ### Prediction
-- `POST /api/predict` - Predecir probabilidad de cierre desde transcripción
-- `GET /api/predict/model-status` - Estado del modelo (entrenado, accuracy, etc.)
-- `POST /api/predict/retrain` - Re-entrenar modelo con datos actuales
+- `GET /api/prediction/status` - Estado del modelo (entrenado, accuracy, datos disponibles)
+- `POST /api/prediction/train` - Entrenar/re-entrenar modelo manualmente
+- `POST /api/prediction` - Predecir probabilidad de cierre desde transcripción
 
 ---
 
 ## 4. Módulo de Predicción (ML)
 
 ### Por qué ML y no LLM para predecir
-- LLM: bueno para extraer información de texto, pero inconsistente para predicciones
-- ML: diseñado para predecir outcomes, consistente, basado en datos reales
-- Enfoque híbrido: LLM extrae categorías → ML predice cierre
+- **LLM**: Bueno para extraer información de texto, pero inconsistente para predicciones numéricas
+- **ML**: Diseñado para predecir outcomes, consistente, basado en patrones de datos reales
+- **Enfoque híbrido**: LLM extrae categorías → ML predice probabilidad de cierre
 
 ### Librería
-- `ml.js` (Logistic Regression)
-- Funciona bien con poca data (60 registros)
-- Corre en Node.js, no requiere servicio separado
+- **`ml.js`** (Logistic Regression)
+- Corre 100% en Node.js (no requiere servicio externo)
+- Funciona bien con datasets pequeños (~50-100 registros)
+- Simple de implementar y mantener
 
 ### Flujo de predicción
-1. Frontend envía transcripción a `POST /api/predict`
-2. Backend extrae categorías con LLM (mismo proceso que upload)
-3. Backend pasa categorías al modelo ML entrenado
-4. Retorna probabilidad y factores que influyen
+```
+1. Usuario envía transcripción
+         ↓
+2. LLM extrae categorías (mismo proceso que upload)
+         ↓
+3. Convertir categorías a features numéricas (one-hot encoding)
+         ↓
+4. Modelo ML predice probabilidad
+         ↓
+5. Retorna: probabilidad + factores que influyeron
+```
 
-### Request/Response
+### Entrenamiento del modelo
+- **Mínimo requerido**: 50 clientes con `closed` conocido (true o false)
+- **Entrenamiento manual**: Solo cuando el usuario ejecuta `POST /api/prediction/train`
+- **Datos usados**: Solo clientes que tienen `closed` definido (no se usan datos sin resultado conocido)
+- **Job en background**: Usa Bull queue para no bloquear la aplicación
+- **Modelo anterior activo**: Mientras entrena uno nuevo, el anterior sigue funcionando
+
+### Endpoints
+
+#### GET /api/prediction/status
+Retorna el estado actual del modelo.
+
+**Response (no entrenado, sin datos suficientes):**
+```json
+{
+  "trained": false,
+  "canTrain": false,
+  "availableSamples": 35,
+  "minimumRequired": 50,
+  "message": "Se necesitan al menos 50 clientes con cierre conocido"
+}
+```
+
+**Response (no entrenado, puede entrenar):**
+```json
+{
+  "trained": false,
+  "canTrain": true,
+  "availableSamples": 58,
+  "minimumRequired": 50,
+  "message": "Modelo listo para entrenar"
+}
+```
+
+**Response (entrenado):**
+```json
+{
+  "trained": true,
+  "canTrain": true,
+  "availableSamples": 58,
+  "minimumRequired": 50,
+  "lastTrainedAt": "2024-01-20T15:30:00Z",
+  "samplesUsed": 58,
+  "accuracy": 0.75,
+  "isTraining": false
+}
+```
+
+**Response (entrenando):**
+```json
+{
+  "trained": true,
+  "canTrain": false,
+  "availableSamples": 65,
+  "minimumRequired": 50,
+  "lastTrainedAt": "2024-01-20T15:30:00Z",
+  "samplesUsed": 58,
+  "accuracy": 0.75,
+  "isTraining": true,
+  "trainingProgress": {
+    "status": "processing",
+    "progress": 45,
+    "startedAt": "2024-01-20T16:00:00Z"
+  }
+}
+```
+
+#### POST /api/prediction/train
+Inicia el entrenamiento del modelo en background.
+
+**Response (éxito):**
+```json
+{
+  "message": "Entrenamiento iniciado",
+  "jobId": "train-123",
+  "samplesUsed": 58
+}
+```
+
+**Response (error - ya entrenando):**
+```json
+{
+  "error": "TRAINING_IN_PROGRESS",
+  "message": "Ya hay un entrenamiento en curso",
+  "progress": 45
+}
+```
+
+**Response (error - datos insuficientes):**
+```json
+{
+  "error": "INSUFFICIENT_DATA",
+  "message": "Se necesitan al menos 50 clientes con cierre conocido",
+  "availableSamples": 35,
+  "minimumRequired": 50
+}
+```
+
+#### POST /api/prediction
+Predice la probabilidad de cierre de una transcripción.
 
 **Request:**
 ```json
 {
-  "transcription": "En nuestra empresa de finanzas..."
+  "transcription": "En nuestra empresa de finanzas hemos notado que la carga de trabajo ha incrementado significativamente. Un colega mencionó Vambe en una conferencia..."
 }
 ```
 
-**Response:**
+**Response (éxito):**
 ```json
 {
-  "probability": 0.83,
+  "probability": 0.78,
   "prediction": "high",
-  "factors": [
-    { "name": "industry", "value": "Finanzas", "impact": "positive", "historicalRate": 0.75 },
-    { "name": "urgency_level", "value": "high", "impact": "positive", "historicalRate": 0.85 },
-    { "name": "sentiment", "value": "Entusiasta", "impact": "positive", "historicalRate": 0.90 }
+  "categories": {
+    "industry": "Finanzas",
+    "company_size": "Mediana",
+    "main_pain_point": "Alto volumen",
+    "discovery_source": "Evento/Conferencia",
+    "volume_trend": "Creciente"
+  },
+  "topFactors": [
+    { "feature": "industry", "value": "Finanzas", "impact": "+12%" },
+    { "feature": "volume_trend", "value": "Creciente", "impact": "+8%" },
+    { "feature": "discovery_source", "value": "Referido", "impact": "+6%" }
   ],
-  "modelAccuracy": 0.78,
-  "recommendation": "Alta probabilidad de cierre. El cliente muestra urgencia y entusiasmo."
+  "model": {
+    "trained": true,
+    "lastTrainedAt": "2024-01-20T15:30:00Z",
+    "samplesUsed": 58,
+    "accuracy": 0.75
+  }
 }
 ```
 
-### Entrenamiento del modelo
-- Se entrena automáticamente cuando hay suficientes datos categorizados (mínimo 20)
-- Se puede re-entrenar manualmente con `POST /api/predict/retrain`
-- Guarda accuracy y métricas del modelo
+**Response (error - modelo no entrenado):**
+```json
+{
+  "error": "MODEL_NOT_TRAINED",
+  "message": "El modelo no está entrenado aún",
+  "canTrain": true,
+  "availableSamples": 58,
+  "minimumRequired": 50
+}
+```
+
+### Casos borde y UX
+
+| Estado | Puede predecir | Puede entrenar | Mensaje UI |
+|--------|---------------|----------------|------------|
+| No entrenado, <50 datos | ❌ | ❌ | "Necesitas más datos (35/50)" |
+| No entrenado, ≥50 datos | ❌ | ✅ | "Entrena el modelo para comenzar" |
+| Entrenado | ✅ | ✅ | Todo habilitado |
+| Entrenando | ✅ (usa anterior) | ❌ | "Entrenando... 45% (modelo actual sigue activo)" |
+| Entrenamiento falló | ✅ (usa anterior) | ✅ | "Error en último entrenamiento. [Reintentar]" |
+
+### Modelo de datos adicional
+
+#### Tabla: prediction_model
+| Campo | Tipo | Descripción |
+|-------|------|-------------|
+| id | UUID | Primary key |
+| trained | BOOLEAN | Si el modelo está entrenado |
+| samples_used | INT | Cantidad de muestras usadas |
+| accuracy | FLOAT | Precisión del modelo (0-1) |
+| model_data | JSONB | Coeficientes del modelo serializado |
+| trained_at | TIMESTAMP | Fecha de entrenamiento |
+| is_training | BOOLEAN | Si hay entrenamiento en curso |
+| training_job_id | VARCHAR | ID del job de Bull |
+| training_started_at | TIMESTAMP | Inicio del entrenamiento actual |
+| last_error | TEXT | Último error si falló |
+
+### Features para el modelo (one-hot encoding)
+Las categorías se convierten a features numéricas:
+- `industry` → 19 features binarias (industry_finanzas, industry_retail, ...)
+- `company_size` → 3 features binarias
+- `main_pain_point` → 9 features binarias
+- `discovery_source` → 7 features binarias
+- `use_case` → 7 features binarias
+- `volume_trend` → 4 features binarias
+- `weekly_contact_volume` → 1 feature numérica (normalizada)
+
+**Target**: `closed` (0 o 1)
 
 ---
 

@@ -78,11 +78,6 @@ export const getUploadClientsWithProgress = async (uploadId: string) => {
   return response.data;
 };
 
-export const getAnalytics = async () => {
-  const response = await api.get('/analytics');
-  return response.data;
-};
-
 export const getDashboards = async () => {
   const response = await api.get('/dashboards');
   return response.data;
@@ -90,5 +85,21 @@ export const getDashboards = async () => {
 
 export const getCategorizations = async (limit: number = 20, offset: number = 0) => {
   const response = await api.get(`/categorization?limit=${limit}&offset=${offset}`);
+  return response.data;
+};
+
+// Prediction API
+export const getPredictionStatus = async () => {
+  const response = await api.get('/prediction/status');
+  return response.data;
+};
+
+export const trainPredictionModel = async () => {
+  const response = await api.post('/prediction/train');
+  return response.data;
+};
+
+export const predictClosure = async (transcription: string) => {
+  const response = await api.post('/prediction', { transcription });
   return response.data;
 };

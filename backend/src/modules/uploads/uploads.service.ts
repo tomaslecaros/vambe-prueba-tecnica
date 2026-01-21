@@ -8,6 +8,7 @@ import {
 import {
   parseMeetingDate,
   parseClosedValue,
+  fixRowEncoding,
 } from '@common/utils/data-parser.util';
 import * as XLSX from 'xlsx';
 
@@ -35,11 +36,14 @@ export class UploadsService {
       const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
       const sheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[sheetName];
-      const rows = XLSX.utils.sheet_to_json(worksheet);
+      const rawRows = XLSX.utils.sheet_to_json(worksheet);
 
-      if (rows.length === 0) {
+      if (rawRows.length === 0) {
         throw new BadRequestException('File is empty');
       }
+
+      // Fix UTF-8 encoding issues (e.g., "TiburÃ³n" -> "Tiburón")
+      const rows = rawRows.map((row) => fixRowEncoding(row as Record<string, any>));
 
       this.validateColumns(rows[0]);
 

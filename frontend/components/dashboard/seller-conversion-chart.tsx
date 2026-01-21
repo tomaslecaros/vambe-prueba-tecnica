@@ -5,25 +5,22 @@ import { ChartContainer, type ChartConfig } from '@/components/ui/chart';
 import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip } from 'recharts';
 import type { ClosureByItem } from '@/types';
 import { AlertCircle, TrendingUp, Users } from 'lucide-react';
+import { CHART_COLORS } from '@/lib/chart-colors';
+
+const MAX_SELLERS_DISPLAY = 10;
 
 interface SellerConversionChartProps {
   data: ClosureByItem[];
 }
 
-// Colores directos para mejor compatibilidad con SVG
-const COLORS = {
-  bar: '#e97f2c', // naranja
-  line: '#16a34a', // verde
-};
-
 const chartConfig = {
-  total: {
-    label: 'Clientes (cantidad)',
-    color: COLORS.bar,
-  },
   closureRate: {
     label: 'Tasa de Cierre (%)',
-    color: COLORS.line,
+    color: CHART_COLORS.chart1,
+  },
+  total: {
+    label: 'Clientes (cantidad)',
+    color: CHART_COLORS.chart2,
   },
 } satisfies ChartConfig;
 
@@ -48,7 +45,7 @@ export function SellerConversionChart({ data }: SellerConversionChartProps) {
   }
 
   // Ordenar por tasa de cierre descendente
-  const chartData = [...data]
+  const allSortedData = [...data]
     .sort((a, b) => b.closureRate - a.closureRate)
     .map((item) => ({
       name: item.name,
@@ -57,9 +54,13 @@ export function SellerConversionChart({ data }: SellerConversionChartProps) {
       closed: item.closed,
     }));
 
-  // Calcular métricas
-  const totalClients = chartData.reduce((sum, item) => sum + item.total, 0);
-  const totalClosed = chartData.reduce((sum, item) => sum + item.closed, 0);
+  // Limitar a máximo de vendedores para visualización
+  const chartData = allSortedData.slice(0, MAX_SELLERS_DISPLAY);
+  const remainingSellers = allSortedData.length - MAX_SELLERS_DISPLAY;
+
+  // Calcular métricas sobre TODOS los datos
+  const totalClients = allSortedData.reduce((sum, item) => sum + item.total, 0);
+  const totalClosed = allSortedData.reduce((sum, item) => sum + item.closed, 0);
   const avgClosureRate = totalClients > 0 ? ((totalClosed / totalClients) * 100).toFixed(1) : '0';
 
   return (
@@ -67,7 +68,8 @@ export function SellerConversionChart({ data }: SellerConversionChartProps) {
       <CardHeader>
         <CardTitle className="text-base">Cierre por Vendedor</CardTitle>
         <CardDescription className="text-xs">
-          Cantidad de clientes y tasa de cierre por vendedor
+          Top {Math.min(data.length, MAX_SELLERS_DISPLAY)} vendedores por tasa de cierre
+          {remainingSellers > 0 && ` (+${remainingSellers} más)`}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -85,7 +87,7 @@ export function SellerConversionChart({ data }: SellerConversionChartProps) {
           <div className="rounded-lg border bg-card p-3">
             <div className="flex items-center justify-between">
               <p className="text-xs font-medium text-muted-foreground">Tasa Promedio</p>
-              <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />
+              <TrendingUp className="h-3.5 w-3.5 text-chart-1" />
             </div>
             <p className="text-xl font-bold mt-1">{avgClosureRate}%</p>
             <p className="text-[10px] text-muted-foreground">de cierre</p>
@@ -101,8 +103,8 @@ export function SellerConversionChart({ data }: SellerConversionChartProps) {
             >
               <defs>
                 <linearGradient id="sellerBarGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={COLORS.bar} stopOpacity={0.9} />
-                  <stop offset="100%" stopColor={COLORS.bar} stopOpacity={0.4} />
+                  <stop offset="0%" stopColor={CHART_COLORS.chart1} stopOpacity={0.9} />
+                  <stop offset="100%" stopColor={CHART_COLORS.chart1} stopOpacity={0.4} />
                 </linearGradient>
               </defs>
 
@@ -129,8 +131,10 @@ export function SellerConversionChart({ data }: SellerConversionChartProps) {
                 yAxisId="left"
                 axisLine={false}
                 tickLine={false}
-                tick={{ fontSize: 10, fill: COLORS.bar }}
-                width={30}
+                tick={{ fontSize: 10, fill: CHART_COLORS.chart1 }}
+                tickFormatter={(value) => `${value}%`}
+                domain={[0, 100]}
+                width={35}
               />
 
               <YAxis
@@ -138,10 +142,8 @@ export function SellerConversionChart({ data }: SellerConversionChartProps) {
                 orientation="right"
                 axisLine={false}
                 tickLine={false}
-                tick={{ fontSize: 10, fill: COLORS.line }}
-                tickFormatter={(value) => `${value}%`}
-                domain={[0, 100]}
-                width={35}
+                tick={{ fontSize: 10, fill: CHART_COLORS.chart2 }}
+                width={30}
               />
 
               <Tooltip
@@ -153,15 +155,15 @@ export function SellerConversionChart({ data }: SellerConversionChartProps) {
                       <div className="rounded-lg border bg-background p-3 shadow-md text-sm">
                         <p className="font-semibold mb-2">{item.name}</p>
                         <div className="flex items-center gap-2 mb-1">
-                          <div className="w-3 h-3 rounded" style={{ background: COLORS.bar }} />
+                          <div className="w-3 h-3 rounded bg-chart-1" />
+                          <span className="text-muted-foreground">Cierre:</span>
+                          <span className="font-medium">{item.closureRate.toFixed(1)}%</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full bg-chart-2" />
                           <span className="text-muted-foreground">Clientes:</span>
                           <span className="font-medium">{item.total}</span>
                           <span className="text-muted-foreground text-xs">({item.closed} cerrados)</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="w-3 h-3 rounded-full" style={{ background: COLORS.line }} />
-                          <span className="text-muted-foreground">Cierre:</span>
-                          <span className="font-medium">{item.closureRate.toFixed(1)}%</span>
                         </div>
                       </div>
                     );
@@ -170,33 +172,32 @@ export function SellerConversionChart({ data }: SellerConversionChartProps) {
                 }}
               />
 
-
-              {/* Bar chart for total clients */}
+              {/* Bar chart for closure rate (porcentaje) */}
               <Bar
                 yAxisId="left"
-                dataKey="total"
+                dataKey="closureRate"
                 fill="url(#sellerBarGradient)"
                 radius={[4, 4, 0, 0]}
                 maxBarSize={40}
               />
 
-              {/* Line chart for closure rate */}
+              {/* Line chart for total clients */}
               <Line
                 yAxisId="right"
                 type="monotone"
-                dataKey="closureRate"
-                stroke={COLORS.line}
+                dataKey="total"
+                stroke={CHART_COLORS.chart2}
                 strokeWidth={3}
                 connectNulls
                 dot={{
-                  fill: COLORS.line,
+                  fill: CHART_COLORS.chart2,
                   stroke: '#fff',
                   strokeWidth: 2,
                   r: 5,
                 }}
                 activeDot={{
                   r: 7,
-                  fill: COLORS.line,
+                  fill: CHART_COLORS.chart2,
                   stroke: '#fff',
                   strokeWidth: 2,
                 }}
@@ -208,15 +209,15 @@ export function SellerConversionChart({ data }: SellerConversionChartProps) {
         {/* Legend */}
         <div className="flex items-center justify-center gap-6 text-xs pt-2 border-t">
           <div className="flex items-center gap-2">
-            <div className="w-4 h-3 rounded" style={{ background: COLORS.bar }} />
-            <span className="font-medium" style={{ color: COLORS.bar }}>Clientes (cantidad)</span>
+            <div className="w-4 h-3 rounded bg-chart-1" />
+            <span className="font-medium text-chart-1">Tasa de Cierre (%)</span>
           </div>
           <div className="flex items-center gap-2">
             <svg width="24" height="12" className="shrink-0">
-              <line x1="0" y1="6" x2="16" y2="6" stroke={COLORS.line} strokeWidth="3" />
-              <circle cx="20" cy="6" r="4" fill={COLORS.line} />
+              <line x1="0" y1="6" x2="16" y2="6" stroke={CHART_COLORS.chart2} strokeWidth="3" />
+              <circle cx="20" cy="6" r="4" fill={CHART_COLORS.chart2} />
             </svg>
-            <span className="font-medium" style={{ color: COLORS.line }}>Tasa de Cierre (%)</span>
+            <span className="font-medium text-chart-2">Clientes (cantidad)</span>
           </div>
         </div>
       </CardContent>

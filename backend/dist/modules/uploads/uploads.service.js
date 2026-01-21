@@ -72,10 +72,11 @@ let UploadsService = UploadsService_1 = class UploadsService {
             const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
             const sheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[sheetName];
-            const rows = XLSX.utils.sheet_to_json(worksheet);
-            if (rows.length === 0) {
+            const rawRows = XLSX.utils.sheet_to_json(worksheet);
+            if (rawRows.length === 0) {
                 throw new common_1.BadRequestException('File is empty');
             }
+            const rows = rawRows.map((row) => (0, data_parser_util_1.fixRowEncoding)(row));
             this.validateColumns(rows[0]);
             await this.prisma.upload.update({
                 where: { id: uploadId },

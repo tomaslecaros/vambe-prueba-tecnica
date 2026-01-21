@@ -5,19 +5,13 @@ import { ChartContainer, ChartTooltip } from '@/components/ui/chart';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import type { ClosureByItem } from '@/types';
 import { AlertCircle } from 'lucide-react';
+import { CHART_COLORS_ARRAY } from '@/lib/chart-colors';
+
+const MAX_PIE_SLICES = 6;
 
 interface DiscoverySourceChartProps {
   data: ClosureByItem[];
 }
-
-// Colores consistentes usando la paleta de chart
-const CHART_COLORS = [
-  'var(--chart-1)',
-  'var(--chart-2)',
-  'var(--chart-3)',
-  'var(--chart-4)',
-  'var(--chart-5)',
-];
 
 export function DiscoverySourceChart({ data }: DiscoverySourceChartProps) {
   if (!data || data.length === 0) {
@@ -42,13 +36,27 @@ export function DiscoverySourceChart({ data }: DiscoverySourceChartProps) {
   // Calcular totales para porcentajes de distribución
   const totalClients = data.reduce((sum, item) => sum + item.total, 0);
 
-  const chartData = data
+  const allData = data
     .map((item) => ({
       name: item.name,
       value: item.total,
       percentage: totalClients > 0 ? ((item.total / totalClients) * 100).toFixed(1) : 0,
     }))
     .sort((a, b) => b.value - a.value);
+
+  // Limitar slices del pie chart, agrupando el resto en "Otros"
+  let chartData = allData;
+  if (allData.length > MAX_PIE_SLICES) {
+    const topItems = allData.slice(0, MAX_PIE_SLICES - 1);
+    const otherItems = allData.slice(MAX_PIE_SLICES - 1);
+    const otherValue = otherItems.reduce((sum, item) => sum + item.value, 0);
+    const otherPercentage = totalClients > 0 ? ((otherValue / totalClients) * 100).toFixed(1) : 0;
+
+    chartData = [
+      ...topItems,
+      { name: `Otros (${otherItems.length})`, value: otherValue, percentage: otherPercentage },
+    ];
+  }
 
   const chartConfig = {
     value: {
@@ -82,7 +90,7 @@ export function DiscoverySourceChart({ data }: DiscoverySourceChartProps) {
                   {chartData.map((_, index) => (
                     <Cell
                       key={`cell-${index}`}
-                      fill={CHART_COLORS[index % CHART_COLORS.length]}
+                      fill={CHART_COLORS_ARRAY[index % CHART_COLORS_ARRAY.length]}
                     />
                   ))}
                 </Pie>
@@ -116,7 +124,7 @@ export function DiscoverySourceChart({ data }: DiscoverySourceChartProps) {
                 <div className="flex items-center gap-2">
                   <div
                     className="w-3 h-3 rounded-full shrink-0"
-                    style={{ backgroundColor: CHART_COLORS[index % CHART_COLORS.length] }}
+                    style={{ backgroundColor: CHART_COLORS_ARRAY[index % CHART_COLORS_ARRAY.length] }}
                   />
                   <span className="truncate text-xs">{item.name}</span>
                 </div>

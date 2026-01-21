@@ -30,6 +30,18 @@ export interface SellerExpertise {
         closedDeals: number;
     }[];
 }
+export interface SellerCrossMatrixItem {
+    seller: string;
+    dimension: string;
+    closureRate: number;
+    total: number;
+    closed: number;
+}
+export interface SellerCrossMatrix {
+    sellers: string[];
+    dimensions: string[];
+    matrix: SellerCrossMatrixItem[];
+}
 export interface DashboardsResponse {
     kpis: KpiStats;
     closureBySeller: ClosureByItem[];
@@ -38,4 +50,6 @@ export interface DashboardsResponse {
     closureByDiscoverySource: ClosureByItem[];
     painPointIndustryMatrix: PainPointIndustryMatrix;
     sellerExpertiseByIndustry: SellerExpertise[];
+    sellerByDiscoverySource: SellerCrossMatrix;
+    sellerByPainPoint: SellerCrossMatrix;
 }

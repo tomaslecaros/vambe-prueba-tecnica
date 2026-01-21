@@ -215,6 +215,20 @@ export interface SellerExpertise {
   }[];
 }
 
+export interface SellerCrossMatrixItem {
+  seller: string;
+  dimension: string;
+  closureRate: number;
+  total: number;
+  closed: number;
+}
+
+export interface SellerCrossMatrix {
+  sellers: string[];
+  dimensions: string[];
+  matrix: SellerCrossMatrixItem[];
+}
+
 export interface DashboardsResponse {
   kpis: DashboardsKpiStats;
   closureBySeller: ClosureByItem[];
@@ -223,4 +237,72 @@ export interface DashboardsResponse {
   closureByDiscoverySource: ClosureByItem[];
   painPointIndustryMatrix: PainPointIndustryMatrix;
   sellerExpertiseByIndustry: SellerExpertise[];
+  sellerByDiscoverySource: SellerCrossMatrix;
+  sellerByPainPoint: SellerCrossMatrix;
+}
+
+// Prediction types
+export interface TrainingProgressDto {
+  status: 'processing' | 'completed' | 'failed';
+  progress: number;
+  startedAt: string;
+}
+
+export interface PredictionStatusResponse {
+  trained: boolean;
+  canTrain: boolean;
+  availableSamples: number;
+  minimumRequired: number;
+  message?: string;
+  lastTrainedAt?: string;
+  samplesUsed?: number;
+  accuracy?: number;
+  isTraining?: boolean;
+  trainingProgress?: TrainingProgressDto;
+  lastError?: string;
+}
+
+export interface TrainResponse {
+  message: string;
+  jobId: string;
+  samplesUsed: number;
+}
+
+export interface TrainErrorResponse {
+  error: 'TRAINING_IN_PROGRESS' | 'INSUFFICIENT_DATA';
+  message: string;
+  progress?: number;
+  availableSamples?: number;
+  minimumRequired?: number;
+}
+
+export interface TopFactorDto {
+  feature: string;
+  value: string;
+  impact: string;
+}
+
+export interface ModelInfoDto {
+  trained: boolean;
+  lastTrainedAt: string | null;
+  samplesUsed: number;
+  accuracy: number | null;
+}
+
+export interface PredictionResponse {
+  probability: number;
+  willClose: boolean; // true si cerrará, false si no cerrará
+  prediction: 'high' | 'medium' | 'low'; // Mantener para compatibilidad
+  categories: Partial<Categories>;
+  topFactors: TopFactorDto[];
+  model: ModelInfoDto;
+}
+
+export interface PredictionErrorResponse {
+  error: 'MODEL_NOT_TRAINED' | 'INSUFFICIENT_CATEGORIZATION';
+  message: string;
+  canTrain?: boolean;
+  availableSamples?: number;
+  minimumRequired?: number;
+  categories?: Partial<Categories>;
 }
