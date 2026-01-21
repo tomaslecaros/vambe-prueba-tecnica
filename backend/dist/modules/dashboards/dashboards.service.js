@@ -33,6 +33,9 @@ let DashboardsService = class DashboardsService {
         const sellerExpertiseByIndustry = this.calculateSellerExpertiseByIndustry(clientsWithCategories);
         const sellerByDiscoverySource = this.calculateSellerCrossMatrix(clientsWithCategories, 'discovery_source');
         const sellerByPainPoint = this.calculateSellerCrossMatrix(clientsWithCategories, 'main_pain_point');
+        const closureByIntegrationNeeds = this.calculateClosureByArrayField(categorizedClients, 'integration_needs');
+        const closureByQueryTopics = this.calculateClosureByArrayField(categorizedClients, 'query_topics');
+        const categoryCrossMatrices = this.calculateCategoryCrossMatrices(categorizedClients);
         return {
             kpis,
             closureBySeller,
@@ -43,6 +46,9 @@ let DashboardsService = class DashboardsService {
             sellerExpertiseByIndustry,
             sellerByDiscoverySource,
             sellerByPainPoint,
+            closureByIntegrationNeeds,
+            closureByQueryTopics,
+            categoryCrossMatrices,
         };
     }
     calculateKpis(allClients, categorizedClients) {
@@ -57,12 +63,56 @@ let DashboardsService = class DashboardsService {
             ? weeklyInteractions.reduce((a, b) => a + b, 0) /
                 weeklyInteractions.length
             : 0;
+        const monthlyClosures = this.calculateMonthlyClosures(allClients);
+        const sortedMonths = [...monthlyClosures].sort((a, b) => b.month.localeCompare(a.month));
+        const lastMonth = sortedMonths[0] || { closed: 0, total: 0, closureRate: 0 };
+        const previousMonth = sortedMonths[1] || { closed: 0, total: 0, closureRate: 0 };
+        const monthOverMonthChange = previousMonth.closureRate > 0
+            ? lastMonth.closureRate - previousMonth.closureRate
+            : lastMonth.closureRate > 0 ? lastMonth.closureRate : 0;
         return {
             totalClients,
             categorizedClients: categorizedCount,
             closureRate: Math.round(closureRate * 10) / 10,
             avgWeeklyInteractions: Math.round(avgWeeklyInteractions),
+            monthlyClosures,
+            lastMonthClosureRate: Math.round(lastMonth.closureRate * 10) / 10,
+            previousMonthClosureRate: Math.round(previousMonth.closureRate * 10) / 10,
+            monthOverMonthChange: Math.round(monthOverMonthChange * 10) / 10,
         };
+    }
+    calculateMonthlyClosures(clients) {
+        const monthlyStats = {};
+        clients.forEach((client) => {
+            const meetingDate = new Date(client.meetingDate);
+            const monthKey = `${meetingDate.getFullYear()}-${String(meetingDate.getMonth() + 1).padStart(2, '0')}`;
+            if (!monthlyStats[monthKey]) {
+                monthlyStats[monthKey] = { total: 0, closed: 0 };
+            }
+            monthlyStats[monthKey].total++;
+            if (client.closed) {
+                monthlyStats[monthKey].closed++;
+            }
+        });
+        const monthNames = [
+            'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+            'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+        ];
+        return Object.entries(monthlyStats)
+            .map(([monthKey, stats]) => {
+            const [year, month] = monthKey.split('-');
+            const monthIndex = parseInt(month, 10) - 1;
+            return {
+                month: monthKey,
+                label: `${monthNames[monthIndex]} ${year}`,
+                total: stats.total,
+                closed: stats.closed,
+                closureRate: stats.total > 0
+                    ? Math.round((stats.closed / stats.total) * 1000) / 10
+                    : 0,
+            };
+        })
+            .sort((a, b) => b.month.localeCompare(a.month));
     }
     calculateClosureBySeller(clients) {
         const sellerStats = {};
@@ -277,6 +327,93 @@ let DashboardsService = class DashboardsService {
         return {
             sellers,
             dimensions,
+            matrix,
+        };
+    }
+    calculateClosureByArrayField(clients, fieldName) {
+        const stats = {};
+        clients.forEach((client) => {
+            const values = client.categorization?.data?.[fieldName] || [];
+            const isClosed = client.closed;
+            values.forEach((value) => {
+                if (!value)
+                    return;
+                if (!stats[value]) {
+                    stats[value] = { total: 0, closed: 0 };
+                }
+                stats[value].total++;
+                if (isClosed) {
+                    stats[value].closed++;
+                }
+            });
+        });
+        return Object.entries(stats)
+            .map(([name, data]) => ({
+            name,
+            total: data.total,
+            closed: data.closed,
+            closureRate: data.total > 0
+                ? Math.round((data.closed / data.total) * 1000) / 10
+                : 0,
+        }))
+            .sort((a, b) => b.closureRate - a.closureRate);
+    }
+    calculateCategoryCrossMatrices(clients) {
+        const combinations = [
+            { key: 'industryByPainPoint', row: 'industry', col: 'main_pain_point' },
+            { key: 'industryByDiscoverySource', row: 'industry', col: 'discovery_source' },
+            { key: 'industryByUseCase', row: 'industry', col: 'use_case' },
+            { key: 'painPointByDiscoverySource', row: 'main_pain_point', col: 'discovery_source' },
+            { key: 'painPointByUseCase', row: 'main_pain_point', col: 'use_case' },
+            { key: 'discoverySourceByUseCase', row: 'discovery_source', col: 'use_case' },
+        ];
+        const result = {};
+        for (const combo of combinations) {
+            result[combo.key] = this.calculateCategoryCrossMatrix(clients, combo.row, combo.col);
+        }
+        return result;
+    }
+    calculateCategoryCrossMatrix(clients, rowField, colField) {
+        const rowsSet = new Set();
+        const colsSet = new Set();
+        const matrixData = {};
+        clients.forEach((client) => {
+            const rowValue = client.categorization?.data?.[rowField] || 'No especificado';
+            const colValue = client.categorization?.data?.[colField] || 'No especificado';
+            rowsSet.add(rowValue);
+            colsSet.add(colValue);
+            if (!matrixData[rowValue]) {
+                matrixData[rowValue] = {};
+            }
+            if (!matrixData[rowValue][colValue]) {
+                matrixData[rowValue][colValue] = { total: 0, closed: 0 };
+            }
+            matrixData[rowValue][colValue].total++;
+            if (client.closed) {
+                matrixData[rowValue][colValue].closed++;
+            }
+        });
+        const rows = Array.from(rowsSet).sort();
+        const cols = Array.from(colsSet).sort();
+        const matrix = [];
+        for (const row of rows) {
+            for (const col of cols) {
+                const stats = matrixData[row]?.[col] || { total: 0, closed: 0 };
+                const closureRate = stats.total > 0
+                    ? Math.round((stats.closed / stats.total) * 1000) / 10
+                    : 0;
+                matrix.push({
+                    row,
+                    col,
+                    closureRate,
+                    total: stats.total,
+                    closed: stats.closed,
+                });
+            }
+        }
+        return {
+            rows,
+            cols,
             matrix,
         };
     }

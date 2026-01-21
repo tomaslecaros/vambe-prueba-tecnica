@@ -8,6 +8,9 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
 var CategorizationProcessor_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CategorizationProcessor = void 0;
@@ -15,14 +18,17 @@ const bull_1 = require("@nestjs/bull");
 const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../../common/services/prisma.service");
 const llm_service_1 = require("../llm/llm.service");
+const prediction_service_1 = require("../prediction/prediction.service");
 const queue_constants_1 = require("../../common/constants/queue.constants");
 let CategorizationProcessor = CategorizationProcessor_1 = class CategorizationProcessor {
     prisma;
     llmService;
+    predictionService;
     logger = new common_1.Logger(CategorizationProcessor_1.name);
-    constructor(prisma, llmService) {
+    constructor(prisma, llmService, predictionService) {
         this.prisma = prisma;
         this.llmService = llmService;
+        this.predictionService = predictionService;
     }
     async handleCategorization(job) {
         const { clientId, uploadId } = job.data;
@@ -48,6 +54,7 @@ let CategorizationProcessor = CategorizationProcessor_1 = class CategorizationPr
             });
             await job.progress(100);
             this.logger.log(`Categorized ${client.email}: ${categories.industry}`);
+            await this.checkAndTriggerAutoTraining(uploadId);
             return {
                 clientId,
                 email: client.email,
@@ -57,6 +64,32 @@ let CategorizationProcessor = CategorizationProcessor_1 = class CategorizationPr
         catch (error) {
             this.logger.error(`Failed to categorize client ${clientId}: ${error.message}`);
             throw error;
+        }
+    }
+    async checkAndTriggerAutoTraining(uploadId) {
+        try {
+            const totalClients = await this.prisma.client.count({
+                where: { uploadId },
+            });
+            const categorizedClients = await this.prisma.client.count({
+                where: {
+                    uploadId,
+                    categorization: { isNot: null },
+                },
+            });
+            if (totalClients > 0 && categorizedClients === totalClients) {
+                this.logger.log(`All ${totalClients} clients from upload ${uploadId} are now categorized. Triggering automatic model training...`);
+                const trainingResult = await this.predictionService.startTraining();
+                if ('error' in trainingResult) {
+                    this.logger.log(`Auto-training not triggered: ${trainingResult.message}`);
+                }
+                else {
+                    this.logger.log(`Auto-training started successfully with ${trainingResult.samplesUsed} samples`);
+                }
+            }
+        }
+        catch (error) {
+            this.logger.error(`Error checking auto-training trigger for upload ${uploadId}: ${error.message}`);
         }
     }
 };
@@ -69,7 +102,9 @@ __decorate([
 ], CategorizationProcessor.prototype, "handleCategorization", null);
 exports.CategorizationProcessor = CategorizationProcessor = CategorizationProcessor_1 = __decorate([
     (0, bull_1.Processor)(queue_constants_1.CATEGORIZATION_QUEUE),
+    __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => prediction_service_1.PredictionService))),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
-        llm_service_1.LlmService])
+        llm_service_1.LlmService,
+        prediction_service_1.PredictionService])
 ], CategorizationProcessor);
 //# sourceMappingURL=categorization.processor.js.map

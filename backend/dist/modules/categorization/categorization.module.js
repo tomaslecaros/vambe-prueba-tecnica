@@ -14,6 +14,7 @@ const categorization_processor_1 = require("./categorization.processor");
 const categorization_controller_1 = require("./categorization.controller");
 const prisma_module_1 = require("../../common/config/prisma.module");
 const llm_module_1 = require("../llm/llm.module");
+const prediction_module_1 = require("../prediction/prediction.module");
 const queue_constants_1 = require("../../common/constants/queue.constants");
 let CategorizationModule = class CategorizationModule {
 };
@@ -23,6 +24,7 @@ exports.CategorizationModule = CategorizationModule = __decorate([
         imports: [
             prisma_module_1.PrismaModule,
             llm_module_1.LlmModule,
+            (0, common_1.forwardRef)(() => prediction_module_1.PredictionModule),
             bull_1.BullModule.registerQueue({
                 name: queue_constants_1.CATEGORIZATION_QUEUE,
             }),

@@ -179,11 +179,23 @@ export interface CategorizationsResponse {
 }
 
 // Dashboards types
+export interface MonthlyClosure {
+  month: string; // Format: "YYYY-MM"
+  label: string; // Format: "Enero 2024"
+  total: number;
+  closed: number;
+  closureRate: number;
+}
+
 export interface DashboardsKpiStats {
   totalClients: number;
   categorizedClients: number;
   closureRate: number;
   avgWeeklyInteractions: number;
+  monthlyClosures?: MonthlyClosure[];
+  lastMonthClosureRate?: number; // Closure rate of last month
+  previousMonthClosureRate?: number; // Closure rate of previous month
+  monthOverMonthChange?: number; // Change in closure rate percentage points
 }
 
 export interface ClosureByItem {
@@ -229,6 +241,21 @@ export interface SellerCrossMatrix {
   matrix: SellerCrossMatrixItem[];
 }
 
+// Matriz genérica para cruzar categorías entre sí
+export interface CategoryCrossMatrixItem {
+  row: string;
+  col: string;
+  closureRate: number;
+  total: number;
+  closed: number;
+}
+
+export interface CategoryCrossMatrix {
+  rows: string[];
+  cols: string[];
+  matrix: CategoryCrossMatrixItem[];
+}
+
 export interface DashboardsResponse {
   kpis: DashboardsKpiStats;
   closureBySeller: ClosureByItem[];
@@ -239,6 +266,9 @@ export interface DashboardsResponse {
   sellerExpertiseByIndustry: SellerExpertise[];
   sellerByDiscoverySource: SellerCrossMatrix;
   sellerByPainPoint: SellerCrossMatrix;
+  closureByIntegrationNeeds: ClosureByItem[];
+  closureByQueryTopics: ClosureByItem[];
+  categoryCrossMatrices: Record<string, CategoryCrossMatrix>;
 }
 
 // Prediction types

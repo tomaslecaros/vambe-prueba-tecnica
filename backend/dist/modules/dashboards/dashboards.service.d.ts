@@ -5,6 +5,7 @@ export declare class DashboardsService {
     constructor(prisma: PrismaService);
     getDashboards(): Promise<DashboardsResponse>;
     private calculateKpis;
+    private calculateMonthlyClosures;
     private calculateClosureBySeller;
     private calculateClosureByIndustry;
     private calculateClosureByPainPoint;
@@ -12,4 +13,7 @@ export declare class DashboardsService {
     private calculatePainPointIndustryMatrix;
     private calculateSellerExpertiseByIndustry;
     private calculateSellerCrossMatrix;
+    private calculateClosureByArrayField;
+    private calculateCategoryCrossMatrices;
+    private calculateCategoryCrossMatrix;
 }

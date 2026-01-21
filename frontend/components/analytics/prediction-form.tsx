@@ -288,12 +288,17 @@ export function PredictionForm({
             <p className="text-xs text-muted-foreground">
               {transcription.length} caracteres
             </p>
+            <div className="rounded-md border-2 border-chart-1/30 bg-chart-1/10 p-2 mt-2">
+              <p className="text-xs text-chart-1">
+                <span className="font-bold">Instrucción:</span> Ingresa un texto que contenga información relevante sobre el cliente, como industria, tamaño de empresa, necesidades, problemas principales y contexto de la reunión para obtener una predicción precisa.
+              </p>
+            </div>
           </div>
           {status.trained && (
             <Button
               onClick={() => handlePredict()}
               disabled={isPredicting || !transcription.trim()}
-              className="w-full"
+              className="w-full bg-chart-1 hover:bg-chart-1/90 text-white"
               size="sm"
             >
               {isPredicting ? (

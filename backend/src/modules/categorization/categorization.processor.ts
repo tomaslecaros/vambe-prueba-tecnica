@@ -1,8 +1,9 @@
 import { Process, Processor } from '@nestjs/bull';
-import { Logger } from '@nestjs/common';
+import { Logger, Inject, forwardRef } from '@nestjs/common';
 import type { Job } from 'bull';
 import { PrismaService } from '@common/services/prisma.service';
 import { LlmService } from '@modules/llm/llm.service';
+import { PredictionService } from '@modules/prediction/prediction.service';
 import {
   CATEGORIZATION_QUEUE,
   MAX_CONCURRENCY,
@@ -16,6 +17,8 @@ export class CategorizationProcessor {
   constructor(
     private prisma: PrismaService,
     private llmService: LlmService,
+    @Inject(forwardRef(() => PredictionService))
+    private predictionService: PredictionService,
   ) {}
 
   @Process({ concurrency: MAX_CONCURRENCY })
@@ -56,6 +59,9 @@ export class CategorizationProcessor {
 
       this.logger.log(`Categorized ${client.email}: ${categories.industry}`);
 
+      // Check if all clients from this upload are now categorized
+      await this.checkAndTriggerAutoTraining(uploadId);
+
       return {
         clientId,
         email: client.email,
@@ -66,6 +72,48 @@ export class CategorizationProcessor {
         `Failed to categorize client ${clientId}: ${error.message}`,
       );
       throw error;
+    }
+  }
+
+  private async checkAndTriggerAutoTraining(uploadId: string): Promise<void> {
+    try {
+      // Get all clients from this upload
+      const totalClients = await this.prisma.client.count({
+        where: { uploadId },
+      });
+
+      // Count clients that have categorization
+      const categorizedClients = await this.prisma.client.count({
+        where: {
+          uploadId,
+          categorization: { isNot: null },
+        },
+      });
+
+      // If all clients are categorized, trigger automatic training
+      if (totalClients > 0 && categorizedClients === totalClients) {
+        this.logger.log(
+          `All ${totalClients} clients from upload ${uploadId} are now categorized. Triggering automatic model training...`,
+        );
+
+        // Try to start training (will fail silently if already training or insufficient data)
+        const trainingResult = await this.predictionService.startTraining();
+        
+        if ('error' in trainingResult) {
+          this.logger.log(
+            `Auto-training not triggered: ${trainingResult.message}`,
+          );
+        } else {
+          this.logger.log(
+            `Auto-training started successfully with ${trainingResult.samplesUsed} samples`,
+          );
+        }
+      }
+    } catch (error) {
+      // Log error but don't throw - we don't want categorization to fail if auto-training fails
+      this.logger.error(
+        `Error checking auto-training trigger for upload ${uploadId}: ${error.message}`,
+      );
     }
   }
 }
