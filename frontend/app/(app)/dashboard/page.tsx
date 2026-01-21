@@ -16,8 +16,11 @@ import {
   IndustryConversionChart,
   SellerConversionChart,
   SellerExpertiseTable,
-  DiscoverySourceChart,
   CrossHeatmap,
+  QueryTopicsChart,
+  PainPointRadarChart,
+  DiscoverySourceDonutChart,
+  IntegrationsRadialChart,
 } from '@/components/dashboard';
 
 export default function DashboardPage() {
@@ -192,10 +195,107 @@ export default function DashboardPage() {
         </TabsContent>
 
         <TabsContent value="categorias" className="space-y-6 mt-6">
+          {/* Industria - full width */}
+          <IndustryConversionChart data={dashboards.closureByIndustry} />
+
+          {/* Pain Point (Radar) y Fuente (Donut) */}
           <div className="grid gap-6 lg:grid-cols-2">
-            <IndustryConversionChart data={dashboards.closureByIndustry} />
-            <DiscoverySourceChart data={dashboards.closureByDiscoverySource} />
+            <PainPointRadarChart data={dashboards.closureByPainPoint} />
+            <DiscoverySourceDonutChart data={dashboards.closureByDiscoverySource} />
           </div>
+
+          {/* Integraciones (Radial) y Temas (Combinado con Top 3) */}
+          <div className="grid gap-6 lg:grid-cols-2">
+            <IntegrationsRadialChart data={dashboards.closureByIntegrationNeeds} maxItems={6} />
+            <QueryTopicsChart data={dashboards.closureByQueryTopics} />
+          </div>
+
+          {/* Heatmap de categorías - Con más combinaciones */}
+          <CrossHeatmap
+            title="Matriz de Cierre por Categorías"
+            description="Cruza diferentes categorías para encontrar combinaciones de alto rendimiento"
+            dataSets={[
+              {
+                rowDimension: 'industry',
+                colDimension: 'painPoint',
+                data: dashboards.categoryCrossMatrices?.industryByPainPoint?.matrix.map((item) => ({
+                  row: item.row,
+                  col: item.col,
+                  value: item.closureRate,
+                  total: item.total,
+                  closed: item.closed,
+                })) || [],
+              },
+              {
+                rowDimension: 'industry',
+                colDimension: 'discoverySource',
+                data: dashboards.categoryCrossMatrices?.industryByDiscoverySource?.matrix.map((item) => ({
+                  row: item.row,
+                  col: item.col,
+                  value: item.closureRate,
+                  total: item.total,
+                  closed: item.closed,
+                })) || [],
+              },
+              {
+                rowDimension: 'industry',
+                colDimension: 'useCase',
+                data: dashboards.categoryCrossMatrices?.industryByUseCase?.matrix.map((item) => ({
+                  row: item.row,
+                  col: item.col,
+                  value: item.closureRate,
+                  total: item.total,
+                  closed: item.closed,
+                })) || [],
+              },
+              {
+                rowDimension: 'painPoint',
+                colDimension: 'discoverySource',
+                data: dashboards.categoryCrossMatrices?.painPointByDiscoverySource?.matrix.map((item) => ({
+                  row: item.row,
+                  col: item.col,
+                  value: item.closureRate,
+                  total: item.total,
+                  closed: item.closed,
+                })) || [],
+              },
+              {
+                rowDimension: 'painPoint',
+                colDimension: 'useCase',
+                data: dashboards.categoryCrossMatrices?.painPointByUseCase?.matrix.map((item) => ({
+                  row: item.row,
+                  col: item.col,
+                  value: item.closureRate,
+                  total: item.total,
+                  closed: item.closed,
+                })) || [],
+              },
+              {
+                rowDimension: 'discoverySource',
+                colDimension: 'useCase',
+                data: dashboards.categoryCrossMatrices?.discoverySourceByUseCase?.matrix.map((item) => ({
+                  row: item.row,
+                  col: item.col,
+                  value: item.closureRate,
+                  total: item.total,
+                  closed: item.closed,
+                })) || [],
+              },
+            ]}
+            rowDimensions={[
+              { key: 'industry', label: 'Industria' },
+              { key: 'painPoint', label: 'Pain Point' },
+              { key: 'discoverySource', label: 'Fuente' },
+            ]}
+            colDimensions={[
+              { key: 'painPoint', label: 'Pain Point' },
+              { key: 'discoverySource', label: 'Fuente' },
+              { key: 'useCase', label: 'Caso de Uso' },
+            ]}
+            defaultRowDimension="industry"
+            defaultColDimension="painPoint"
+            valueLabel="Cierre"
+          />
         </TabsContent>
 
         <TabsContent value="todas" className="space-y-6 mt-6">

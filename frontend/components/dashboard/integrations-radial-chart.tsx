@@ -7,25 +7,18 @@ import type { ClosureByItem } from '@/types';
 import { AlertCircle } from 'lucide-react';
 import { CHART_COLORS_ARRAY, CHART_COLORS } from '@/lib/chart-colors';
 
-// All defined industries - show all even with 0%
-const ALL_INDUSTRIES = [
-  'Finanzas', 'Retail/E-commerce', 'Salud', 'Tecnología', 'Educación',
-  'Logística/Transporte', 'Turismo', 'Consultoría', 'Gastronomía', 'Legal',
-  'Eventos', 'Inmobiliario', 'ONG', 'Diseño/Creativos', 'Construcción',
-  'Energía', 'Moda', 'Agricultura', 'Otro'
-];
-
-interface IndustryConversionChartProps {
+interface IntegrationsRadialChartProps {
   data: ClosureByItem[];
+  maxItems?: number;
 }
 
-export function IndustryConversionChart({ data }: IndustryConversionChartProps) {
+export function IntegrationsRadialChart({ data, maxItems = 6 }: IntegrationsRadialChartProps) {
   if (!data || data.length === 0) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Cierre por Industria</CardTitle>
-          <CardDescription>Rendimiento de cierre por sector</CardDescription>
+          <CardTitle className="text-base">Necesidades de Integración</CardTitle>
+          <CardDescription>Tasa de cierre por integración</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-center h-[300px] text-muted-foreground">
@@ -39,22 +32,15 @@ export function IndustryConversionChart({ data }: IndustryConversionChartProps) 
     );
   }
 
-  // Create map of existing data
-  const dataMap = new Map(data.map((item) => [item.name, item]));
-
-  // Include ALL industries, even those with 0%
-  const chartData = ALL_INDUSTRIES.map((industry) => {
-    const existing = dataMap.get(industry);
-    return {
-      name: industry,
-      closureRate: existing?.closureRate ?? 0,
-      total: existing?.total ?? 0,
-      closed: existing?.closed ?? 0,
-    };
-  }).sort((a, b) => b.closureRate - a.closureRate);
-
-  // Fixed height for all industries
-  const chartHeight = Math.max(400, chartData.length * 28);
+  // Sort by closure rate
+  const chartData = [...data]
+    .sort((a, b) => b.closureRate - a.closureRate)
+    .map((item) => ({
+      name: item.name,
+      closureRate: item.closureRate,
+      total: item.total,
+      closed: item.closed,
+    }));
 
   const chartConfig = {
     closureRate: {
@@ -62,14 +48,17 @@ export function IndustryConversionChart({ data }: IndustryConversionChartProps) 
     },
   };
 
-  const industriesWithData = chartData.filter((d) => d.total > 0).length;
+  const integrationsWithData = chartData.filter((d) => d.total > 0).length;
+
+  // Use a fixed larger height to take advantage of all available space
+  const chartHeight = Math.max(500, chartData.length * 50);
 
   return (
-    <Card className="col-span-1">
+    <Card>
       <CardHeader>
-        <CardTitle>Cierre por Industria</CardTitle>
+        <CardTitle className="text-base">Necesidades de Integración</CardTitle>
         <CardDescription>
-          Todas las industrias ordenadas por tasa de cierre ({industriesWithData} con datos)
+          Todas las integraciones ordenadas por tasa de cierre ({integrationsWithData} con datos)
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -78,7 +67,7 @@ export function IndustryConversionChart({ data }: IndustryConversionChartProps) 
             <BarChart
               data={chartData}
               layout="vertical"
-              margin={{ top: 5, right: 60, left: 10, bottom: 5 }}
+              margin={{ top: 5, right: 60, left: 0, bottom: 5 }}
             >
               <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
               <XAxis

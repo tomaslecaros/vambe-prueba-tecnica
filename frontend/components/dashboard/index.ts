@@ -6,3 +6,8 @@ export { SellerConversionChart } from './seller-conversion-chart';
 export { SellerExpertiseTable } from './seller-expertise-table';
 export { DiscoverySourceChart } from './discovery-source-chart';
 export { CrossHeatmap, type HeatmapCell, type HeatmapDimension, type HeatmapDataSet } from './cross-heatmap';
+export { ClosureBarChart } from './closure-bar-chart';
+export { QueryTopicsChart } from './query-topics-chart';
+export { PainPointRadarChart } from './pain-point-radar-chart';
+export { DiscoverySourceDonutChart } from './discovery-source-donut-chart';
+export { IntegrationsRadialChart } from './integrations-radial-chart';

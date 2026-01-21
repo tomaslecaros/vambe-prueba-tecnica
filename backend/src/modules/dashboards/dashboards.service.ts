@@ -7,6 +7,8 @@ import {
   PainPointIndustryMatrix,
   SellerExpertise,
   SellerCrossMatrix,
+  CategoryCrossMatrix,
+  MonthlyClosure,
 } from './dto/dashboards.dto';
 
 @Injectable()
@@ -39,6 +41,11 @@ export class DashboardsService {
       this.calculateSellerCrossMatrix(clientsWithCategories, 'discovery_source');
     const sellerByPainPoint =
       this.calculateSellerCrossMatrix(clientsWithCategories, 'main_pain_point');
+    const closureByIntegrationNeeds =
+      this.calculateClosureByArrayField(categorizedClients, 'integration_needs');
+    const closureByQueryTopics =
+      this.calculateClosureByArrayField(categorizedClients, 'query_topics');
+    const categoryCrossMatrices = this.calculateCategoryCrossMatrices(categorizedClients);
 
     return {
       kpis,
@@ -50,6 +57,9 @@ export class DashboardsService {
       sellerExpertiseByIndustry,
       sellerByDiscoverySource,
       sellerByPainPoint,
+      closureByIntegrationNeeds,
+      closureByQueryTopics,
+      categoryCrossMatrices,
     };
   }
 
@@ -74,12 +84,73 @@ export class DashboardsService {
           weeklyInteractions.length
         : 0;
 
+    // Calculate monthly closures
+    const monthlyClosures = this.calculateMonthlyClosures(allClients);
+    
+    // Get last month and previous month data
+    const sortedMonths = [...monthlyClosures].sort((a, b) => b.month.localeCompare(a.month));
+    const lastMonth = sortedMonths[0] || { closed: 0, total: 0, closureRate: 0 };
+    const previousMonth = sortedMonths[1] || { closed: 0, total: 0, closureRate: 0 };
+    
+    // Calculate month-over-month change in closure rate
+    const monthOverMonthChange = previousMonth.closureRate > 0
+      ? lastMonth.closureRate - previousMonth.closureRate
+      : lastMonth.closureRate > 0 ? lastMonth.closureRate : 0;
+
     return {
       totalClients,
       categorizedClients: categorizedCount,
       closureRate: Math.round(closureRate * 10) / 10,
       avgWeeklyInteractions: Math.round(avgWeeklyInteractions),
+      monthlyClosures,
+      lastMonthClosureRate: Math.round(lastMonth.closureRate * 10) / 10,
+      previousMonthClosureRate: Math.round(previousMonth.closureRate * 10) / 10,
+      monthOverMonthChange: Math.round(monthOverMonthChange * 10) / 10,
     };
+  }
+
+  private calculateMonthlyClosures(clients: any[]): MonthlyClosure[] {
+    const monthlyStats: Record<
+      string,
+      { total: number; closed: number }
+    > = {};
+
+    // Group by month (YYYY-MM format)
+    clients.forEach((client) => {
+      const meetingDate = new Date(client.meetingDate);
+      const monthKey = `${meetingDate.getFullYear()}-${String(meetingDate.getMonth() + 1).padStart(2, '0')}`;
+      
+      if (!monthlyStats[monthKey]) {
+        monthlyStats[monthKey] = { total: 0, closed: 0 };
+      }
+      monthlyStats[monthKey].total++;
+      if (client.closed) {
+        monthlyStats[monthKey].closed++;
+      }
+    });
+
+    // Convert to array and format
+    const monthNames = [
+      'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+    ];
+
+    return Object.entries(monthlyStats)
+      .map(([monthKey, stats]) => {
+        const [year, month] = monthKey.split('-');
+        const monthIndex = parseInt(month, 10) - 1;
+        return {
+          month: monthKey,
+          label: `${monthNames[monthIndex]} ${year}`,
+          total: stats.total,
+          closed: stats.closed,
+          closureRate:
+            stats.total > 0
+              ? Math.round((stats.closed / stats.total) * 1000) / 10
+              : 0,
+        };
+      })
+      .sort((a, b) => b.month.localeCompare(a.month)); // Most recent first
   }
 
   private calculateClosureBySeller(clients: any[]): ClosureByItem[] {
@@ -365,6 +436,125 @@ export class DashboardsService {
     return {
       sellers,
       dimensions,
+      matrix,
+    };
+  }
+
+  private calculateClosureByArrayField(
+    clients: any[],
+    fieldName: string,
+  ): ClosureByItem[] {
+    const stats: Record<string, { total: number; closed: number }> = {};
+
+    clients.forEach((client) => {
+      const values: string[] = client.categorization?.data?.[fieldName] || [];
+      const isClosed = client.closed;
+
+      values.forEach((value) => {
+        if (!value) return;
+        if (!stats[value]) {
+          stats[value] = { total: 0, closed: 0 };
+        }
+        stats[value].total++;
+        if (isClosed) {
+          stats[value].closed++;
+        }
+      });
+    });
+
+    return Object.entries(stats)
+      .map(([name, data]) => ({
+        name,
+        total: data.total,
+        closed: data.closed,
+        closureRate:
+          data.total > 0
+            ? Math.round((data.closed / data.total) * 1000) / 10
+            : 0,
+      }))
+      .sort((a, b) => b.closureRate - a.closureRate);
+  }
+
+  private calculateCategoryCrossMatrices(clients: any[]): Record<string, CategoryCrossMatrix> {
+    const combinations = [
+      { key: 'industryByPainPoint', row: 'industry', col: 'main_pain_point' },
+      { key: 'industryByDiscoverySource', row: 'industry', col: 'discovery_source' },
+      { key: 'industryByUseCase', row: 'industry', col: 'use_case' },
+      { key: 'painPointByDiscoverySource', row: 'main_pain_point', col: 'discovery_source' },
+      { key: 'painPointByUseCase', row: 'main_pain_point', col: 'use_case' },
+      { key: 'discoverySourceByUseCase', row: 'discovery_source', col: 'use_case' },
+    ];
+
+    const result: Record<string, CategoryCrossMatrix> = {};
+
+    for (const combo of combinations) {
+      result[combo.key] = this.calculateCategoryCrossMatrix(
+        clients,
+        combo.row,
+        combo.col,
+      );
+    }
+
+    return result;
+  }
+
+  private calculateCategoryCrossMatrix(
+    clients: any[],
+    rowField: string,
+    colField: string,
+  ): CategoryCrossMatrix {
+    const rowsSet = new Set<string>();
+    const colsSet = new Set<string>();
+    const matrixData: Record<
+      string,
+      Record<string, { total: number; closed: number }>
+    > = {};
+
+    clients.forEach((client) => {
+      const rowValue = client.categorization?.data?.[rowField] || 'No especificado';
+      const colValue = client.categorization?.data?.[colField] || 'No especificado';
+
+      rowsSet.add(rowValue);
+      colsSet.add(colValue);
+
+      if (!matrixData[rowValue]) {
+        matrixData[rowValue] = {};
+      }
+      if (!matrixData[rowValue][colValue]) {
+        matrixData[rowValue][colValue] = { total: 0, closed: 0 };
+      }
+
+      matrixData[rowValue][colValue].total++;
+      if (client.closed) {
+        matrixData[rowValue][colValue].closed++;
+      }
+    });
+
+    const rows = Array.from(rowsSet).sort();
+    const cols = Array.from(colsSet).sort();
+
+    const matrix: CategoryCrossMatrix['matrix'] = [];
+    for (const row of rows) {
+      for (const col of cols) {
+        const stats = matrixData[row]?.[col] || { total: 0, closed: 0 };
+        const closureRate =
+          stats.total > 0
+            ? Math.round((stats.closed / stats.total) * 1000) / 10
+            : 0;
+
+        matrix.push({
+          row,
+          col,
+          closureRate,
+          total: stats.total,
+          closed: stats.closed,
+        });
+      }
+    }
+
+    return {
+      rows,
+      cols,
       matrix,
     };
   }

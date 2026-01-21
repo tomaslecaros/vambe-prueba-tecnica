@@ -1,8 +1,8 @@
 'use client';
 
 import { Card } from '@/components/ui/card';
-import { Target, Users, TrendingUp, Award } from 'lucide-react';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
+import { Target, Calendar, TrendingUp, Award } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip, Cell } from 'recharts';
 import type { DashboardsKpiStats, ClosureByItem } from '@/types';
 import { CHART_COLORS_ARRAY } from '@/lib/chart-colors';
 
@@ -21,18 +21,26 @@ export function ConversionKpis({
   closureByDiscoverySource = [],
 }: ConversionKpisProps) {
   const closedClients = Math.round((kpis.totalClients * kpis.closureRate) / 100);
+  
+  // Get last month data
+  const lastMonthClosureRate = kpis.lastMonthClosureRate ?? 0;
+  const previousMonthClosureRate = kpis.previousMonthClosureRate ?? 0;
+  const monthOverMonthChange = kpis.monthOverMonthChange ?? 0;
+  const lastMonthLabel = kpis.monthlyClosures?.[0]?.label || 'Último mes';
+  const previousMonthLabel = kpis.monthlyClosures?.[1]?.label || 'Mes anterior';
 
   // Top 5 industrias por tasa de cierre
   const topIndustries = [...closureByIndustry]
     .sort((a, b) => b.closureRate - a.closureRate)
     .slice(0, 5);
 
-  // Datos para el pie chart de discovery source (ordenados por cantidad)
+  // Datos para el gráfico de barras de discovery source (ordenados por cantidad)
   const discoveryData = [...closureByDiscoverySource]
     .sort((a, b) => b.total - a.total)
     .map((item, index) => ({
       name: item.name,
-      value: item.total,
+      total: item.total,
+      closed: item.closed,
       closureRate: item.closureRate,
       fill: CHART_COLORS_ARRAY[index % CHART_COLORS_ARRAY.length],
     }));
@@ -45,16 +53,16 @@ export function ConversionKpis({
       icon: Target,
     },
     {
-      title: 'Clientes Totales',
-      value: kpis.totalClients.toLocaleString(),
-      description: 'En el sistema',
-      icon: Users,
+      title: 'Tasa de Cierre del Mes',
+      value: `${lastMonthClosureRate.toFixed(1)}%`,
+      description: lastMonthLabel,
+      icon: Calendar,
     },
     {
-      title: 'Ventas Cerradas',
-      value: closedClients.toLocaleString(),
-      description: 'Clientes convertidos',
-      icon: TrendingUp,
+      title: 'Tasa de Cierre del Mes Anterior',
+      value: `${previousMonthClosureRate.toFixed(1)}%`,
+      description: previousMonthLabel,
+      icon: Calendar,
     },
   ];
 
@@ -64,10 +72,11 @@ export function ConversionKpis({
       <div className="grid gap-4 md:grid-cols-3">
         {kpiCards.map((kpi) => {
           const Icon = kpi.icon;
+          
           return (
             <Card key={kpi.title} className="p-6">
               <div className="flex items-center justify-between">
-                <div className="space-y-1">
+                <div className="space-y-1 flex-1">
                   <p className="text-sm font-medium text-muted-foreground">
                     {kpi.title}
                   </p>
@@ -119,7 +128,7 @@ export function ConversionKpis({
           </div>
         </Card>
 
-        {/* Pie Chart - Fuente de Descubrimiento */}
+        {/* Bar Chart - Fuente de Descubrimiento */}
         <Card className="p-6">
           <div className="flex items-center gap-2 mb-4">
             <Target className="h-5 w-5 text-muted-foreground" />
@@ -128,20 +137,19 @@ export function ConversionKpis({
           {discoveryData.length > 0 ? (
             <div className="h-[200px]">
               <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={discoveryData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={40}
-                    outerRadius={70}
-                    paddingAngle={2}
-                    dataKey="value"
-                  >
-                    {discoveryData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.fill} />
-                    ))}
-                  </Pie>
+                <BarChart
+                  data={discoveryData}
+                  layout="vertical"
+                  margin={{ top: 5, right: 10, left: 80, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                  <XAxis type="number" domain={[0, 'dataMax']} />
+                  <YAxis 
+                    type="category" 
+                    dataKey="name" 
+                    width={75}
+                    tick={{ fontSize: 12 }}
+                  />
                   <Tooltip
                     content={({ active, payload }) => {
                       if (active && payload && payload.length) {
@@ -150,7 +158,10 @@ export function ConversionKpis({
                           <div className="rounded-lg border bg-background p-2 shadow-md">
                             <p className="font-medium">{data.name}</p>
                             <p className="text-xs text-muted-foreground">
-                              {data.value} clientes · {data.closureRate.toFixed(0)}% cierre
+                              {data.total} clientes
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {data.closed} cerrados · {data.closureRate.toFixed(1)}% cierre
                             </p>
                           </div>
                         );
@@ -158,26 +169,17 @@ export function ConversionKpis({
                       return null;
                     }}
                   />
-                </PieChart>
+                  <Bar dataKey="total" radius={[0, 4, 4, 0]}>
+                    {discoveryData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.fill} />
+                    ))}
+                  </Bar>
+                </BarChart>
               </ResponsiveContainer>
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">Sin datos</p>
           )}
-          {/* Leyenda compacta */}
-          <div className="flex flex-wrap gap-2 mt-2">
-            {discoveryData.slice(0, 4).map((item, index) => (
-              <div key={item.name} className="flex items-center gap-1">
-                <div
-                  className="w-2 h-2 rounded-full"
-                  style={{ backgroundColor: CHART_COLORS_ARRAY[index] }}
-                />
-                <span className="text-xs text-muted-foreground truncate max-w-[80px]">
-                  {item.name}
-                </span>
-              </div>
-            ))}
-          </div>
         </Card>
 
         {/* Mejor Vendedor */}
