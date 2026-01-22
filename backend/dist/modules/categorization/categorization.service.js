@@ -33,7 +33,6 @@ let CategorizationService = CategorizationService_1 = class CategorizationServic
             this.logger.log('No clients to categorize');
             return { jobsCreated: 0 };
         }
-        this.logger.log(`Queueing ${total} clients for categorization (uploadId: ${uploadId})`);
         const jobs = await Promise.all(clientsWithoutCategories.map((client) => this.categorizationQueue.add({
             clientId: client.id,
             uploadId,
@@ -46,7 +45,7 @@ let CategorizationService = CategorizationService_1 = class CategorizationServic
             removeOnComplete: false,
             removeOnFail: false,
         })));
-        this.logger.log(`Created ${jobs.length} jobs for upload ${uploadId}`);
+        this.logger.log(`Categorization queued: ${jobs.length} clients for upload ${uploadId}`);
         return {
             jobsCreated: jobs.length,
             jobIds: jobs.map((j) => j.id),

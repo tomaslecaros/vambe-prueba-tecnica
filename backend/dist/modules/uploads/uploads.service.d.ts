@@ -7,12 +7,12 @@ export declare class UploadsService {
     constructor(prisma: PrismaService, categorizationService: CategorizationService);
     createUpload(filename: string, totalRows: number): Promise<{
         id: string;
-        createdAt: Date;
-        status: import(".prisma/client").$Enums.UploadStatus;
         filename: string;
+        status: import(".prisma/client").$Enums.UploadStatus;
         totalRows: number;
         processedRows: number;
         errors: import("@prisma/client/runtime/library").JsonValue | null;
+        createdAt: Date;
         completedAt: Date | null;
     }>;
     processFile(uploadId: string, fileBuffer: Buffer): Promise<{
@@ -38,25 +38,39 @@ export declare class UploadsService {
         total: number;
         warning?: undefined;
     }>;
-    private processRows;
     private markUploadAsFailed;
     private validateColumns;
-    private saveClient;
-    private findClientByEmailAndPhone;
+    private processRowsInBatches;
+    private getExistingClientsMap;
+    private saveBatch;
     getUploads(limit?: number, offset?: number, status?: string): Promise<{
         uploads: {
             id: string;
-            createdAt: Date;
-            status: import(".prisma/client").$Enums.UploadStatus;
             filename: string;
+            status: import(".prisma/client").$Enums.UploadStatus;
             totalRows: number;
             processedRows: number;
             errors: import("@prisma/client/runtime/library").JsonValue | null;
+            createdAt: Date;
             completedAt: Date | null;
         }[];
         total: number;
         limit: number;
         offset: number;
+    }>;
+    getUploadStatus(uploadId: string): Promise<{
+        id: string;
+        filename: string;
+        status: import(".prisma/client").$Enums.UploadStatus;
+        totalRows: number;
+        processedRows: number;
+        clientsSaved: number;
+        clientsCategorized: number;
+        progress: number;
+        categorizationProgress: number;
+        createdAt: Date;
+        completedAt: Date | null;
+        errors: import("@prisma/client/runtime/library").JsonValue;
     }>;
     getUploadClientsWithProgress(uploadId: string): Promise<{
         upload: {

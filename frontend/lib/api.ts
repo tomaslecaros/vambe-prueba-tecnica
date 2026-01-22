@@ -73,6 +73,11 @@ export const getUploads = async (limit: number = 20, offset: number = 0, status?
   return response.data;
 };
 
+export const getUploadStatus = async (uploadId: string) => {
+  const response = await api.get(`/uploads/${uploadId}/status`);
+  return response.data;
+};
+
 export const getUploadClientsWithProgress = async (uploadId: string) => {
   const response = await api.get(`/uploads/${uploadId}/clients`);
   return response.data;

@@ -27,10 +27,6 @@ export class CategorizationService {
       return { jobsCreated: 0 };
     }
 
-    this.logger.log(
-      `Queueing ${total} clients for categorization (uploadId: ${uploadId})`,
-    );
-
     const jobs = await Promise.all(
       clientsWithoutCategories.map((client) =>
         this.categorizationQueue.add(
@@ -51,7 +47,9 @@ export class CategorizationService {
       ),
     );
 
-    this.logger.log(`Created ${jobs.length} jobs for upload ${uploadId}`);
+    this.logger.log(
+      `Categorization queued: ${jobs.length} clients for upload ${uploadId}`,
+    );
 
     return {
       jobsCreated: jobs.length,

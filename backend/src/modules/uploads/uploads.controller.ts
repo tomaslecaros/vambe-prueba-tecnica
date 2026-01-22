@@ -27,10 +27,7 @@ export class UploadsController {
     this.validateFileExtension(file.originalname);
 
     const upload = await this.uploadsService.createUpload(file.originalname, 0);
-    const result = await this.uploadsService.processFile(
-      upload.id,
-      file.buffer,
-    );
+    const result = await this.uploadsService.processFile(upload.id, file.buffer);
 
     return {
       message: 'File uploaded and processed successfully',
@@ -54,6 +51,11 @@ export class UploadsController {
     const limitNum = limit ? parseInt(limit, 10) : 20;
     const offsetNum = offset ? parseInt(offset, 10) : 0;
     return this.uploadsService.getUploads(limitNum, offsetNum, status);
+  }
+
+  @Get(':id/status')
+  async getUploadStatus(@Param('id') id: string) {
+    return this.uploadsService.getUploadStatus(id);
   }
 
   @Get(':id/clients')

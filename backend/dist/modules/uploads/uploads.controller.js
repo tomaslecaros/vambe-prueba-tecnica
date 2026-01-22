@@ -46,6 +46,9 @@ let UploadsController = class UploadsController {
         const offsetNum = offset ? parseInt(offset, 10) : 0;
         return this.uploadsService.getUploads(limitNum, offsetNum, status);
     }
+    async getUploadStatus(id) {
+        return this.uploadsService.getUploadStatus(id);
+    }
     async getUploadClients(id) {
         return this.uploadsService.getUploadClientsWithProgress(id);
     }
@@ -74,6 +77,13 @@ __decorate([
     __metadata("design:paramtypes", [String, String, String]),
     __metadata("design:returntype", Promise)
 ], UploadsController.prototype, "getUploads", null);
+__decorate([
+    (0, common_1.Get)(':id/status'),
+    __param(0, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], UploadsController.prototype, "getUploadStatus", null);
 __decorate([
     (0, common_1.Get)(':id/clients'),
     __param(0, (0, common_1.Param)('id')),

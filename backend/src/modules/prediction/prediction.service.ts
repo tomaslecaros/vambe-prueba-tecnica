@@ -3,6 +3,14 @@ import { InjectQueue } from '@nestjs/bull';
 import type { Queue } from 'bull';
 import { PrismaService } from '@common/services/prisma.service';
 import { PREDICTION_TRAINING_QUEUE, MINIMUM_TRAINING_SAMPLES } from '@common/constants/queue.constants';
+import {
+  INDUSTRY_VALUES,
+  COMPANY_SIZE_VALUES,
+  PAIN_POINT_VALUES,
+  DISCOVERY_SOURCE_VALUES,
+  USE_CASE_VALUES,
+  VOLUME_TREND_VALUES,
+} from '@common/constants/prediction.constants';
 import { LlmService } from '@modules/llm/llm.service';
 import { CategoriesDto } from '@modules/llm/dto/categories.dto';
 import {
@@ -17,33 +25,6 @@ import {
 const LogisticRegression = require('ml-logistic-regression');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { Matrix } = require('ml-matrix');
-
-// Feature definitions for one-hot encoding
-const INDUSTRY_VALUES = [
-  'Finanzas', 'Retail/E-commerce', 'Salud', 'Tecnología', 'Educación',
-  'Logística/Transporte', 'Turismo', 'Consultoría', 'Gastronomía', 'Legal',
-  'Eventos', 'Inmobiliario', 'ONG', 'Diseño/Creativos', 'Construcción',
-  'Energía', 'Moda', 'Agricultura', 'Otro'
-];
-
-const COMPANY_SIZE_VALUES = ['Pequeña', 'Mediana', 'Grande', 'No especificado'];
-
-const PAIN_POINT_VALUES = [
-  'Alto volumen', 'Consultas repetitivas', 'Respuesta lenta', 'Procesos manuales',
-  'Multicanal', 'Escalabilidad', 'Soporte técnico', 'Clientes internacionales', 'Otro'
-];
-
-const DISCOVERY_SOURCE_VALUES = [
-  'Evento/Conferencia', 'Búsqueda online', 'Referido', 'Redes sociales',
-  'Artículo/Podcast', 'Foro/Comunidad', 'Otro'
-];
-
-const USE_CASE_VALUES = [
-  'Atención al cliente', 'Soporte técnico', 'Ventas/Pre-venta', 'E-commerce',
-  'Reservas/Citas', 'Logística', 'Otro'
-];
-
-const VOLUME_TREND_VALUES = ['Creciente', 'Estable', 'Estacional', 'No especificado'];
 
 @Injectable()
 export class PredictionService {
@@ -185,8 +166,6 @@ export class PredictionService {
       };
     }
 
-    // Create a new model record to mark training as started
-    // We create a new record for each training session
     const modelRecord = await this.prisma.predictionModel.create({
       data: {
         isTraining: true,
@@ -196,12 +175,10 @@ export class PredictionService {
       },
     });
 
-    // Queue the training job
     const job = await this.trainingQueue.add('train', {
       modelId: modelRecord.id,
     });
 
-    // Update the model record with the job ID
     await this.prisma.predictionModel.update({
       where: { id: modelRecord.id },
       data: { trainingJobId: job.id.toString() },
@@ -216,7 +193,6 @@ export class PredictionService {
 
   async trainModel(modelId: string): Promise<void> {
     try {
-      // Get all clients with categorization and known closed status
       const clients = await this.prisma.client.findMany({
         where: {
           categorization: { isNot: null },
@@ -231,7 +207,6 @@ export class PredictionService {
 
       await this.updateTrainingProgress(modelId, 10);
 
-      // Encode features
       const X: number[][] = [];
       const y: number[] = [];
 
@@ -243,7 +218,6 @@ export class PredictionService {
 
       await this.updateTrainingProgress(modelId, 30);
 
-      // Split data for validation (80/20)
       const splitIndex = Math.floor(X.length * 0.8);
       const XTrain = X.slice(0, splitIndex);
       const yTrain = y.slice(0, splitIndex);
@@ -252,13 +226,11 @@ export class PredictionService {
 
       await this.updateTrainingProgress(modelId, 50);
 
-      // Train logistic regression model
       const newModel = new LogisticRegression({
         numSteps: 1000,
         learningRate: 0.1,
       });
 
-      // Convert to ml-matrix format
       const XTrainMatrix = new Matrix(XTrain);
       const yTrainMatrix = new Matrix([yTrain]).transpose();
       
@@ -266,11 +238,9 @@ export class PredictionService {
 
       await this.updateTrainingProgress(modelId, 80);
 
-      // Calculate accuracy on test set
       let correct = 0;
       const XTestMatrix = new Matrix(XTest);
       for (let i = 0; i < XTest.length; i++) {
-        // Get row as array and convert to Matrix (1 row x N columns)
         const testSampleArray = XTestMatrix.getRow(i);
         const testSampleMatrix = new Matrix([testSampleArray]);
         const predictions = newModel.predict(testSampleMatrix);
@@ -284,7 +254,6 @@ export class PredictionService {
 
       await this.updateTrainingProgress(modelId, 90);
 
-      // Save model to database
       const modelData = newModel.toJSON();
       
       await this.prisma.predictionModel.update({
@@ -300,7 +269,6 @@ export class PredictionService {
         },
       });
 
-      // Update in-memory model
       this.model = newModel;
     } catch (error) {
       this.logger.error(`Model training failed: ${error.message}`);
@@ -334,10 +302,8 @@ export class PredictionService {
       };
     }
 
-    // Extract categories using LLM
     const categories = await this.llmService.extractCategoriesFromTranscription(transcription);
 
-    // Validate fundamental fields - reject predictions when industry or pain_point is "Otro"
     if (categories.industry === 'Otro' || categories.main_pain_point === 'Otro') {
       const missingFields: string[] = [];
       if (categories.industry === 'Otro') missingFields.push('Industria');
@@ -362,18 +328,11 @@ export class PredictionService {
       };
     }
 
-    // Encode features
     const features = this.encodeCategoriesToFeatures(categories);
     const featuresMatrix = new Matrix([features]);
-    
-    // Get prediction class
     const predictionClass = this.model.predict(featuresMatrix);
-    
-    // Extract weights directly using to1DArray()
     const weightsArray = this.model.classifiers[0].weights.to1DArray();
     
-    // Calculate z = sum of (weight[i] * feature[i])
-    // Handle bias: if weights.length === features.length + 1, first weight is bias
     let z = 0;
     if (weightsArray.length === features.length + 1) {
       z = weightsArray[0]; // bias term
@@ -386,13 +345,8 @@ export class PredictionService {
       }
     }
     
-    // Calculate probability using sigmoid (no clamping)
     const probability = 1 / (1 + Math.exp(-z));
-
-    // Determine if will close
     const willClose = probability >= 0.5;
-    
-    // Prediction label for backward compatibility
     let prediction: 'high' | 'medium' | 'low';
     if (probability >= 0.7) {
       prediction = 'high';
@@ -402,7 +356,6 @@ export class PredictionService {
       prediction = 'low';
     }
 
-    // Calculate top factors
     const topFactors = this.calculateTopFactors(categories, features, z, probability, weightsArray);
 
     return {
@@ -435,37 +388,30 @@ export class PredictionService {
   private encodeCategoriesToFeatures(categories: CategoriesDto): number[] {
     const features: number[] = [];
 
-    // One-hot encode industry
     for (const value of INDUSTRY_VALUES) {
       features.push(categories.industry === value ? 1 : 0);
     }
 
-    // One-hot encode company_size
     for (const value of COMPANY_SIZE_VALUES) {
       features.push(categories.company_size === value ? 1 : 0);
     }
 
-    // One-hot encode main_pain_point
     for (const value of PAIN_POINT_VALUES) {
       features.push(categories.main_pain_point === value ? 1 : 0);
     }
 
-    // One-hot encode discovery_source
     for (const value of DISCOVERY_SOURCE_VALUES) {
       features.push(categories.discovery_source === value ? 1 : 0);
     }
 
-    // One-hot encode use_case
     for (const value of USE_CASE_VALUES) {
       features.push(categories.use_case === value ? 1 : 0);
     }
 
-    // One-hot encode volume_trend
     for (const value of VOLUME_TREND_VALUES) {
       features.push(categories.volume_trend === value ? 1 : 0);
     }
 
-    // Normalize weekly_contact_volume (0-1 range, assuming max 1000)
     const normalizedVolume = Math.min(categories.weekly_contact_volume / 1000, 1);
     features.push(normalizedVolume);
 
@@ -490,16 +436,13 @@ export class PredictionService {
     let featureIndex = 0;
     const hasBias = coefficients.length === features.length + 1;
 
-    // Process each category of features
     for (const category of featureCategories) {
       for (let i = 0; i < category.values.length; i++) {
         const idx = featureIndex + i;
         if (features[idx] === 1) {
-          // Get coefficient: if bias exists, shift index by 1
           const coeffIdx = hasBias ? idx + 1 : idx;
           if (coeffIdx < coefficients.length) {
             const coeff = coefficients[coeffIdx];
-            // Calculate impact: probability with feature - probability without feature
             const newZ = baselineZ - coeff;
             const newProb = 1 / (1 + Math.exp(-newZ));
             const probChange = baselineProb - newProb;
@@ -515,7 +458,6 @@ export class PredictionService {
       featureIndex += category.values.length;
     }
 
-    // Sort by absolute impact and take top 3
     featureImpacts.sort((a, b) => Math.abs(b.probChange) - Math.abs(a.probChange));
 
     return featureImpacts.slice(0, 3).map(f => {
