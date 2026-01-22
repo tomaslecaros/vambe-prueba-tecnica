@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/table';
 import { Card } from '@/components/ui/card';
 import { FileValidator } from '@/components/uploads/file-validator';
+import { UploadProgress } from '@/components/uploads/upload-progress';
 import { uploadFile, getAllClients } from '@/lib/api';
 import { toast } from 'sonner';
 import { Client } from '@/types';
@@ -30,6 +31,7 @@ export default function UploadsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [pendingClientIds, setPendingClientIds] = useState<Set<string>>(new Set());
+  const [activeUploadId, setActiveUploadId] = useState<string | null>(null);
 
   // Cargar clientes al montar
   useEffect(() => {
@@ -70,30 +72,11 @@ export default function UploadsPage() {
     setIsUploading(true);
     try {
       const response = await uploadFile(file);
-
-      if (response.warning) {
-        toast.warning(response.warning, {
-          description: `${response.duplicates} clientes duplicados`,
-        });
-      } else {
-        toast.success('Archivo subido correctamente', {
-          description: `${response.newClients} clientes nuevos, ${response.duplicates} duplicados`,
-        });
-      }
-
-      // Recargar la tabla para mostrar los nuevos clientes
-      if (response.newClients > 0) {
-        await loadClients();
-
-        // Marcar los nuevos clientes como "pendientes" de categorización
-        const newResponse = await getAllClients(response.newClients, 0);
-        const newIds = new Set<string>(
-          newResponse.clients
-            .filter((c: Client) => !c.categorization)
-            .map((c: Client) => c.id)
-        );
-        setPendingClientIds(newIds);
-      }
+      
+      setActiveUploadId(response.uploadId);
+      toast.success('Archivo subido correctamente', {
+        description: 'El archivo se está procesando en segundo plano',
+      });
     } catch (error) {
       toast.error('Error al subir el archivo', {
         description: error instanceof Error ? error.message : 'Error desconocido',
@@ -101,6 +84,14 @@ export default function UploadsPage() {
     } finally {
       setIsUploading(false);
     }
+  };
+
+  const handleUploadComplete = () => {
+    setActiveUploadId(null);
+    loadClients(true);
+    toast.success('Procesamiento completado', {
+      description: 'Los clientes se están categorizando automáticamente',
+    });
   };
 
   const pendingCount = clients.filter((c) => !c.categorization).length;
@@ -119,20 +110,30 @@ export default function UploadsPage() {
       {/* Layout 2 columnas */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Columna izquierda: Upload */}
-        <Card className="p-4 flex flex-col">
-          <div className="flex items-center gap-2 mb-3">
-            <FileSpreadsheet className="h-4 w-4 text-muted-foreground" />
-            <span className="font-medium text-sm">Subir archivo</span>
-          </div>
-          <div className="flex-1 flex items-center">
-            <div className="w-full">
-              <FileValidator onValidFile={handleFileUpload} isUploading={isUploading} />
-              <p className="text-xs text-muted-foreground mt-2">
-                Formatos: .xlsx, .csv (máx. 10MB)
-              </p>
+        <div className="space-y-4">
+          <Card className="p-4 flex flex-col">
+            <div className="flex items-center gap-2 mb-3">
+              <FileSpreadsheet className="h-4 w-4 text-muted-foreground" />
+              <span className="font-medium text-sm">Subir archivo</span>
             </div>
-          </div>
-        </Card>
+            <div className="flex-1 flex items-center">
+              <div className="w-full">
+                <FileValidator onValidFile={handleFileUpload} isUploading={isUploading} />
+                <p className="text-xs text-muted-foreground mt-2">
+                  Formatos: .xlsx, .csv (máx. 10MB)
+                </p>
+              </div>
+            </div>
+          </Card>
+
+          {/* Progress Card */}
+          {activeUploadId && (
+            <UploadProgress
+              uploadId={activeUploadId}
+              onComplete={handleUploadComplete}
+            />
+          )}
+        </div>
 
         {/* Columna derecha: Resumen */}
         <Card className="p-4 flex flex-col">

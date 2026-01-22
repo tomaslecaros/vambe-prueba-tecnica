@@ -33,7 +33,6 @@ let CategorizationProcessor = CategorizationProcessor_1 = class CategorizationPr
     async handleCategorization(job) {
         const { clientId, uploadId } = job.data;
         try {
-            this.logger.log(`Processing job ${job.id} for client ${clientId}`);
             const client = await this.prisma.client.findUnique({
                 where: { id: clientId },
             });
@@ -53,7 +52,6 @@ let CategorizationProcessor = CategorizationProcessor_1 = class CategorizationPr
                 },
             });
             await job.progress(100);
-            this.logger.log(`Categorized ${client.email}: ${categories.industry}`);
             await this.checkAndTriggerAutoTraining(uploadId);
             return {
                 clientId,
@@ -78,13 +76,13 @@ let CategorizationProcessor = CategorizationProcessor_1 = class CategorizationPr
                 },
             });
             if (totalClients > 0 && categorizedClients === totalClients) {
-                this.logger.log(`All ${totalClients} clients from upload ${uploadId} are now categorized. Triggering automatic model training...`);
+                this.logger.log(`Upload ${uploadId}: all ${totalClients} categorized. Triggering model training.`);
                 const trainingResult = await this.predictionService.startTraining();
                 if ('error' in trainingResult) {
-                    this.logger.log(`Auto-training not triggered: ${trainingResult.message}`);
+                    this.logger.log(`Model training skipped: ${trainingResult.message}`);
                 }
                 else {
-                    this.logger.log(`Auto-training started successfully with ${trainingResult.samplesUsed} samples`);
+                    this.logger.log(`Model training started (${trainingResult.samplesUsed} samples).`);
                 }
             }
         }

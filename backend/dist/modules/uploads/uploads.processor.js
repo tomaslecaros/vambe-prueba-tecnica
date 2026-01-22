@@ -41,40 +41,39 @@ var __importStar = (this && this.__importStar) || (function () {
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
-var UploadsService_1;
+var UploadProcessor_1;
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.UploadsService = void 0;
+exports.UploadProcessor = void 0;
+const bull_1 = require("@nestjs/bull");
 const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../../common/services/prisma.service");
 const categorization_service_1 = require("../categorization/categorization.service");
-const upload_constants_1 = require("../../common/constants/upload.constants");
+const queue_constants_1 = require("../../common/constants/queue.constants");
 const data_parser_util_1 = require("../../common/utils/data-parser.util");
 const XLSX = __importStar(require("xlsx"));
-let UploadsService = UploadsService_1 = class UploadsService {
+let UploadProcessor = UploadProcessor_1 = class UploadProcessor {
     prisma;
     categorizationService;
-    logger = new common_1.Logger(UploadsService_1.name);
+    logger = new common_1.Logger(UploadProcessor_1.name);
     constructor(prisma, categorizationService) {
         this.prisma = prisma;
         this.categorizationService = categorizationService;
     }
-    async createUpload(filename, totalRows) {
-        return this.prisma.upload.create({
-            data: {
-                filename,
-                totalRows,
-                status: 'pending',
-            },
-        });
-    }
-    async processFile(uploadId, fileBuffer) {
+    async handleUploadProcessing(job) {
+        const { uploadId, fileBuffer } = job.data;
         try {
+            await job.progress(5);
+            this.logger.log(`Processing upload ${uploadId}`);
             const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
             const sheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[sheetName];
             const rawRows = XLSX.utils.sheet_to_json(worksheet);
             if (rawRows.length === 0) {
-                throw new common_1.BadRequestException('File is empty');
+                await this.prisma.upload.update({
+                    where: { id: uploadId },
+                    data: { status: 'failed', errors: { message: 'File is empty' } },
+                });
+                throw new Error('File is empty');
             }
             const rows = rawRows.map((row) => (0, data_parser_util_1.fixRowEncoding)(row));
             this.validateColumns(rows[0]);
@@ -85,7 +84,10 @@ let UploadsService = UploadsService_1 = class UploadsService {
                     status: 'processing',
                 },
             });
-            const { processedCount, duplicatesCount, errorsCount, errorDetails } = await this.processRowsInBatches(uploadId, rows);
+            await job.progress(10);
+            const { processedCount, duplicatesCount, errorsCount, errorDetails } = await this.processRowsInBatches(uploadId, rows, (progress) => {
+                job.progress(10 + Math.floor(progress * 80));
+            });
             if (processedCount === 0 && rows.length > 0) {
                 const status = errorsCount === rows.length
                     ? 'failed'
@@ -104,24 +106,9 @@ let UploadsService = UploadsService_1 = class UploadsService {
                     },
                 });
                 if (duplicatesCount === rows.length) {
-                    this.logger.log(`Upload ${uploadId} complete: 0 new, ${duplicatesCount} duplicates (no categorization).`);
+                    this.logger.warn(`Upload ${uploadId}: All ${rows.length} clients are duplicates. No categorization needed.`);
                 }
-                else {
-                    this.logger.log(`Upload ${uploadId} complete: 0 new, ${duplicatesCount} duplicates, ${errorsCount} errors.`);
-                }
-                return {
-                    success: processedCount === 0 && duplicatesCount > 0,
-                    processedRows: processedCount,
-                    duplicates: duplicatesCount,
-                    errors: errorsCount,
-                    errorDetails: errorDetails.length > 0 ? errorDetails : undefined,
-                    total: rows.length,
-                    warning: processedCount === 0 && duplicatesCount === rows.length
-                        ? 'All clients already exist in the database'
-                        : errorsCount === rows.length
-                            ? 'All rows failed validation'
-                            : undefined,
-                };
+                return;
             }
             await this.prisma.upload.update({
                 where: { id: uploadId },
@@ -131,40 +118,44 @@ let UploadsService = UploadsService_1 = class UploadsService {
                     processedRows: processedCount,
                 },
             });
+            await job.progress(95);
             if (processedCount > 0) {
                 this.categorizationService
                     .queueCategorizationForUpload(uploadId)
                     .catch((error) => this.logger.error('Categorization queue error:', error));
             }
-            this.logger.log(`Upload ${uploadId} complete: ${processedCount} new, ${duplicatesCount} duplicates, ${errorsCount} errors`);
-            return {
-                success: true,
-                processedRows: processedCount,
-                duplicates: duplicatesCount,
-                errors: errorsCount,
-                errorDetails: errorDetails.length > 0 ? errorDetails : undefined,
-                total: rows.length,
-            };
+            await job.progress(100);
+            this.logger.log(`Upload ${uploadId} processed: ${processedCount} new clients`);
         }
         catch (error) {
-            await this.markUploadAsFailed(uploadId, error instanceof Error ? error.message : 'Unknown error');
+            this.logger.error(`Upload processing failed for ${uploadId}: ${error.message}`);
+            await this.prisma.upload.update({
+                where: { id: uploadId },
+                data: {
+                    status: 'failed',
+                    errors: { message: error.message },
+                },
+            });
             throw error;
         }
     }
-    async markUploadAsFailed(uploadId, errorMessage) {
-        await this.prisma.upload.update({
-            where: { id: uploadId },
-            data: { status: 'failed', errors: { message: errorMessage } },
-        });
-    }
     validateColumns(firstRow) {
+        const REQUIRED_COLUMNS = [
+            'Nombre',
+            'Correo Electronico',
+            'Numero de Telefono',
+            'Fecha de la Reunion',
+            'Vendedor asignado',
+            'closed',
+            'Transcripcion',
+        ];
         const fileColumns = Object.keys(firstRow);
-        const missingColumns = upload_constants_1.REQUIRED_COLUMNS.filter((col) => !fileColumns.includes(col));
+        const missingColumns = REQUIRED_COLUMNS.filter((col) => !fileColumns.includes(col));
         if (missingColumns.length > 0) {
-            throw new common_1.BadRequestException(`Missing columns: ${missingColumns.join(', ')}`);
+            throw new Error(`Missing columns: ${missingColumns.join(', ')}`);
         }
     }
-    async processRowsInBatches(uploadId, rows) {
+    async processRowsInBatches(uploadId, rows, onProgress) {
         let processedCount = 0;
         let duplicatesCount = 0;
         let errorsCount = 0;
@@ -200,7 +191,7 @@ let UploadsService = UploadsService_1 = class UploadsService {
                 closed,
                 transcription: String(row['Transcripcion'] || '').trim(),
             });
-            if (clientsToCreate.length >= upload_constants_1.UPLOAD_BATCH_SIZE) {
+            if (clientsToCreate.length >= queue_constants_1.UPLOAD_BATCH_SIZE) {
                 const result = await this.saveBatch(clientsToCreate);
                 processedCount += result.success;
                 duplicatesCount += result.duplicates;
@@ -210,6 +201,7 @@ let UploadsService = UploadsService_1 = class UploadsService {
                     existingClientsMap.set(`${c.email}|${c.phone}`, true);
                 });
                 clientsToCreate.length = 0;
+                onProgress((i + 1) / rows.length);
             }
         }
         if (clientsToCreate.length > 0) {
@@ -218,6 +210,7 @@ let UploadsService = UploadsService_1 = class UploadsService {
             duplicatesCount += result.duplicates;
             errorsCount += result.errors;
             errorDetails.push(...result.errorDetails);
+            onProgress(1);
         }
         return { processedCount, duplicatesCount, errorsCount, errorDetails };
     }
@@ -232,17 +225,17 @@ let UploadsService = UploadsService_1 = class UploadsService {
             }
         });
         const keysArray = Array.from(clientKeys);
-        for (let i = 0; i < keysArray.length; i += upload_constants_1.UPLOAD_BATCH_SIZE) {
-            const batch = keysArray.slice(i, i + upload_constants_1.UPLOAD_BATCH_SIZE);
+        for (let i = 0; i < keysArray.length; i += queue_constants_1.UPLOAD_BATCH_SIZE) {
+            const batch = keysArray.slice(i, i + queue_constants_1.UPLOAD_BATCH_SIZE);
             const conditions = batch.map((key) => {
-                const idx = key.indexOf('|');
-                const email = idx >= 0 ? key.slice(0, idx) : key;
-                const phone = idx >= 0 ? key.slice(idx + 1) : '';
+                const [email, phone] = key.split('|');
                 return { email, phone };
             });
             const existing = await this.prisma.client.findMany({
                 where: {
-                    OR: conditions.map((c) => ({ email: c.email, phone: c.phone })),
+                    OR: conditions.map((c) => ({
+                        AND: [{ email: c.email }, { phone: c.phone }],
+                    })),
                 },
                 select: { email: true, phone: true },
             });
@@ -266,23 +259,21 @@ let UploadsService = UploadsService_1 = class UploadsService {
             duplicates = clients.length - result.count;
         }
         catch (error) {
-            const err = error;
-            this.logger.error(`Batch save error: ${err.message ?? 'Unknown'}`);
+            this.logger.error(`Batch save error: ${error.message}`);
             for (const client of clients) {
                 try {
                     await this.prisma.client.create({ data: client });
                     success++;
                 }
-                catch (innerErr) {
-                    const e = innerErr;
-                    if (e.code === 'P2002') {
+                catch (err) {
+                    if (err.code === 'P2002') {
                         duplicates++;
                     }
                     else {
                         errors++;
                         errorDetails.push({
                             email: client.email || 'unknown',
-                            error: e.message || 'Unknown error',
+                            error: err.message || 'Unknown error',
                         });
                     }
                 }
@@ -290,106 +281,17 @@ let UploadsService = UploadsService_1 = class UploadsService {
         }
         return { success, duplicates, errors, errorDetails };
     }
-    async getUploads(limit = 20, offset = 0, status) {
-        const where = status ? { status: status } : undefined;
-        const [uploads, total] = await Promise.all([
-            this.prisma.upload.findMany({
-                where,
-                orderBy: { createdAt: 'desc' },
-                take: limit,
-                skip: offset,
-            }),
-            this.prisma.upload.count({ where }),
-        ]);
-        return {
-            uploads,
-            total,
-            limit,
-            offset,
-        };
-    }
-    async getUploadStatus(uploadId) {
-        const upload = await this.prisma.upload.findUnique({
-            where: { id: uploadId },
-        });
-        if (!upload) {
-            throw new common_1.BadRequestException('Upload not found');
-        }
-        const clientsCount = await this.prisma.client.count({
-            where: { uploadId },
-        });
-        const categorizedCount = await this.prisma.client.count({
-            where: {
-                uploadId,
-                categorization: { isNot: null },
-            },
-        });
-        return {
-            id: upload.id,
-            filename: upload.filename,
-            status: upload.status,
-            totalRows: upload.totalRows || 0,
-            processedRows: upload.processedRows || 0,
-            clientsSaved: clientsCount,
-            clientsCategorized: categorizedCount,
-            progress: upload.totalRows
-                ? Math.round(((upload.processedRows || 0) / upload.totalRows) * 100)
-                : 0,
-            categorizationProgress: clientsCount
-                ? Math.round((categorizedCount / clientsCount) * 100)
-                : 0,
-            createdAt: upload.createdAt,
-            completedAt: upload.completedAt,
-            errors: upload.errors,
-        };
-    }
-    async getUploadClientsWithProgress(uploadId) {
-        const upload = await this.prisma.upload.findUnique({
-            where: { id: uploadId },
-        });
-        if (!upload) {
-            throw new common_1.BadRequestException('Upload not found');
-        }
-        const clients = await this.prisma.client.findMany({
-            where: { uploadId },
-            include: {
-                categorization: true,
-            },
-            orderBy: { createdAt: 'asc' },
-        });
-        const total = clients.length;
-        const categorized = clients.filter((c) => c.categorization !== null).length;
-        const pending = total - categorized;
-        return {
-            upload: {
-                id: upload.id,
-                filename: upload.filename,
-                status: upload.status,
-                totalRows: upload.totalRows,
-                processedRows: upload.processedRows,
-                createdAt: upload.createdAt,
-                completedAt: upload.completedAt,
-            },
-            progress: {
-                total,
-                categorized,
-                pending,
-                percentage: total > 0 ? Math.round((categorized / total) * 100) : 0,
-            },
-            clients: clients.map((client) => ({
-                id: client.id,
-                name: client.name,
-                email: client.email,
-                status: client.categorization ? 'completed' : 'pending',
-                categorizedAt: client.categorization?.processedAt,
-            })),
-        };
-    }
 };
-exports.UploadsService = UploadsService;
-exports.UploadsService = UploadsService = UploadsService_1 = __decorate([
-    (0, common_1.Injectable)(),
+exports.UploadProcessor = UploadProcessor;
+__decorate([
+    (0, bull_1.Process)({ concurrency: 1 }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], UploadProcessor.prototype, "handleUploadProcessing", null);
+exports.UploadProcessor = UploadProcessor = UploadProcessor_1 = __decorate([
+    (0, bull_1.Processor)(queue_constants_1.UPLOAD_PROCESSING_QUEUE),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
         categorization_service_1.CategorizationService])
-], UploadsService);
-//# sourceMappingURL=uploads.service.js.map
+], UploadProcessor);
+//# sourceMappingURL=uploads.processor.js.map

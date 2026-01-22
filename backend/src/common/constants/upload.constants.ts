@@ -9,3 +9,4 @@ export const REQUIRED_COLUMNS = [
 ] as const;
 
 export const ALLOWED_FILE_EXTENSIONS = ['.xlsx', '.csv'] as const;
+export const UPLOAD_BATCH_SIZE = 50;

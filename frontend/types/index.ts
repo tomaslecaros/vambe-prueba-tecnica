@@ -2,12 +2,22 @@ export interface UploadResponse {
   message: string;
   uploadId: string;
   filename: string;
+  status?: string;
+}
+
+export interface UploadStatus {
+  id: string;
+  filename: string;
+  status: string;
   totalRows: number;
-  newClients: number;
-  duplicates: number;
-  errors: number;
-  errorDetails?: ErrorDetail[];
-  warning?: string;
+  processedRows: number;
+  clientsSaved: number;
+  clientsCategorized: number;
+  progress: number;
+  categorizationProgress: number;
+  createdAt: string;
+  completedAt: string | null;
+  errors?: any;
 }
 
 export interface ErrorDetail {

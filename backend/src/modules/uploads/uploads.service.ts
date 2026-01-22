@@ -3,7 +3,7 @@ import { PrismaService } from '@common/services/prisma.service';
 import { CategorizationService } from '@modules/categorization/categorization.service';
 import {
   REQUIRED_COLUMNS,
-  ALLOWED_FILE_EXTENSIONS,
+  UPLOAD_BATCH_SIZE,
 } from '@common/constants/upload.constants';
 import {
   parseMeetingDate,
@@ -42,9 +42,7 @@ export class UploadsService {
         throw new BadRequestException('File is empty');
       }
 
-      // Fix UTF-8 encoding issues (e.g., "TiburÃ³n" -> "Tiburón")
-      const rows = rawRows.map((row) => fixRowEncoding(row as Record<string, any>));
-
+      const rows = rawRows.map((row) => fixRowEncoding(row as Record<string, unknown>));
       this.validateColumns(rows[0]);
 
       await this.prisma.upload.update({
@@ -55,71 +53,74 @@ export class UploadsService {
         },
       });
 
-      const { processedCount, duplicatesCount, errorsCount, errorDetails } =
-        await this.processRows(uploadId, rows);
+    const { processedCount, duplicatesCount, errorsCount, errorDetails } =
+      await this.processRowsInBatches(uploadId, rows);
 
-      // Validar si se procesó al menos un cliente
-      if (processedCount === 0 && rows.length > 0) {
-        const status =
-          errorsCount === rows.length
-            ? 'failed'
-            : duplicatesCount === rows.length
-              ? 'completed'
-              : 'completed';
-
-        await this.prisma.upload.update({
-          where: { id: uploadId },
-          data: {
-            status,
-            completedAt: new Date(),
-            processedRows: processedCount,
-            errors:
-              errorsCount > 0
-                ? { message: 'All rows failed or were duplicates', details: errorDetails }
-                : undefined,
-          },
-        });
-
-        // Si todos son duplicados, no hay nada que categorizar
-        if (duplicatesCount === rows.length) {
-          this.logger.warn(
-            `Upload ${uploadId}: All ${rows.length} clients are duplicates. No categorization needed.`,
-          );
-        }
-
-        return {
-          success: processedCount === 0 && duplicatesCount > 0,
-          processedRows: processedCount,
-          duplicates: duplicatesCount,
-          errors: errorsCount,
-          errorDetails: errorDetails.length > 0 ? errorDetails : undefined,
-          total: rows.length,
-          warning:
-            processedCount === 0 && duplicatesCount === rows.length
-              ? 'All clients already exist in the database'
-              : errorsCount === rows.length
-                ? 'All rows failed validation'
-                : undefined,
-        };
-      }
+    if (processedCount === 0 && rows.length > 0) {
+      const status =
+        errorsCount === rows.length
+          ? 'failed'
+          : duplicatesCount === rows.length
+            ? 'completed'
+            : 'completed';
 
       await this.prisma.upload.update({
         where: { id: uploadId },
         data: {
-          status: 'completed',
+          status,
           completedAt: new Date(),
           processedRows: processedCount,
+          errors:
+            errorsCount > 0
+              ? { message: 'All rows failed or were duplicates', details: errorDetails }
+              : undefined,
         },
       });
 
-      // Categorize all new clients in background (solo si hay clientes nuevos)
-      if (processedCount > 0) {
-        this.categorizationService
-          .queueCategorizationForUpload(uploadId)
-          .catch((error) => this.logger.error('Categorization queue error:', error));
+      if (duplicatesCount === rows.length) {
+        this.logger.log(
+          `Upload ${uploadId} complete: 0 new, ${duplicatesCount} duplicates (no categorization).`,
+        );
       } else {
-        this.logger.log('No new clients to categorize');
+        this.logger.log(
+          `Upload ${uploadId} complete: 0 new, ${duplicatesCount} duplicates, ${errorsCount} errors.`,
+        );
       }
+
+      return {
+        success: processedCount === 0 && duplicatesCount > 0,
+        processedRows: processedCount,
+        duplicates: duplicatesCount,
+        errors: errorsCount,
+        errorDetails: errorDetails.length > 0 ? errorDetails : undefined,
+        total: rows.length,
+        warning:
+          processedCount === 0 && duplicatesCount === rows.length
+            ? 'All clients already exist in the database'
+            : errorsCount === rows.length
+              ? 'All rows failed validation'
+              : undefined,
+      };
+    }
+
+    await this.prisma.upload.update({
+      where: { id: uploadId },
+      data: {
+        status: 'completed',
+        completedAt: new Date(),
+        processedRows: processedCount,
+      },
+    });
+
+    if (processedCount > 0) {
+      this.categorizationService
+        .queueCategorizationForUpload(uploadId)
+        .catch((error) => this.logger.error('Categorization queue error:', error));
+    }
+
+    this.logger.log(
+      `Upload ${uploadId} complete: ${processedCount} new, ${duplicatesCount} duplicates, ${errorsCount} errors`,
+    );
 
       return {
         success: true,
@@ -130,47 +131,19 @@ export class UploadsService {
         total: rows.length,
       };
     } catch (error) {
-      await this.markUploadAsFailed(uploadId, error.message);
+      await this.markUploadAsFailed(uploadId, error instanceof Error ? error.message : 'Unknown error');
       throw error;
     }
-  }
-
-  private async processRows(uploadId: string, rows: any[]) {
-    let processedCount = 0;
-    let duplicatesCount = 0;
-    let errorsCount = 0;
-    const errorDetails: Array<{ email: string; error: string }> = [];
-
-    for (const row of rows) {
-      const result = await this.saveClient(uploadId, row);
-
-      if (result.created) {
-        processedCount++;
-      } else if (result.reason === 'duplicate') {
-        duplicatesCount++;
-      } else if (result.reason === 'error') {
-        errorsCount++;
-        errorDetails.push({
-          email: String(row['Correo Electronico'] || 'unknown'),
-          error: result.error || 'Unknown error',
-        });
-      }
-    }
-
-    return { processedCount, duplicatesCount, errorsCount, errorDetails };
   }
 
   private async markUploadAsFailed(uploadId: string, errorMessage: string) {
     await this.prisma.upload.update({
       where: { id: uploadId },
-      data: {
-        status: 'failed',
-        errors: { message: errorMessage },
-      },
+      data: { status: 'failed', errors: { message: errorMessage } },
     });
   }
 
-  private validateColumns(firstRow: any) {
+  private validateColumns(firstRow: Record<string, unknown>) {
     const fileColumns = Object.keys(firstRow);
     const missingColumns = REQUIRED_COLUMNS.filter(
       (col) => !fileColumns.includes(col),
@@ -183,59 +156,149 @@ export class UploadsService {
     }
   }
 
-  private async saveClient(uploadId: string, row: any) {
-    try {
+  private async processRowsInBatches(uploadId: string, rows: any[]) {
+    let processedCount = 0;
+    let duplicatesCount = 0;
+    let errorsCount = 0;
+    const errorDetails: Array<{ email: string; error: string }> = [];
+
+    const existingClientsMap = await this.getExistingClientsMap(rows);
+    const clientsToCreate: any[] = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
       const email = String(row['Correo Electronico'] || '').trim();
       const phone = String(row['Numero de Telefono'] || '').trim();
 
-      // Validar que email y phone no estén vacíos
       if (!email || !phone) {
-        return {
-          created: false,
-          reason: 'error',
+        errorsCount++;
+        errorDetails.push({
+          email: email || 'unknown',
           error: 'Email or phone is missing',
-        };
+        });
+        continue;
       }
 
-      const existingClient = await this.findClientByEmailAndPhone(email, phone);
-
-      if (existingClient) {
-        this.logger.debug(`Duplicate client: ${email} - ${phone}`);
-        return { created: false, reason: 'duplicate' };
+      const key = `${email}|${phone}`;
+      if (existingClientsMap.has(key)) {
+        duplicatesCount++;
+        continue;
       }
 
       const meetingDate = parseMeetingDate(row['Fecha de la Reunion']);
       const closed = parseClosedValue(row['closed']);
 
-      await this.prisma.client.create({
-        data: {
-          uploadId,
-          name: String(row['Nombre'] || '').trim(),
-          email,
-          phone,
-          meetingDate,
-          seller: String(row['Vendedor asignado'] || '').trim(),
-          closed,
-          transcription: String(row['Transcripcion'] || '').trim(),
-        },
+      clientsToCreate.push({
+        uploadId,
+        name: String(row['Nombre'] || '').trim(),
+        email,
+        phone,
+        meetingDate,
+        seller: String(row['Vendedor asignado'] || '').trim(),
+        closed,
+        transcription: String(row['Transcripcion'] || '').trim(),
       });
 
-      return { created: true };
-    } catch (error) {
-      this.logger.error(`Error saving client: ${error.message}`);
-      return { created: false, reason: 'error', error: error.message };
+      if (clientsToCreate.length >= UPLOAD_BATCH_SIZE) {
+        const result = await this.saveBatch(clientsToCreate);
+        processedCount += result.success;
+        duplicatesCount += result.duplicates;
+        errorsCount += result.errors;
+        errorDetails.push(...result.errorDetails);
+
+        clientsToCreate.forEach((c) => {
+          existingClientsMap.set(`${c.email}|${c.phone}`, true);
+        });
+        clientsToCreate.length = 0;
+      }
     }
+
+    if (clientsToCreate.length > 0) {
+      const result = await this.saveBatch(clientsToCreate);
+      processedCount += result.success;
+      duplicatesCount += result.duplicates;
+      errorsCount += result.errors;
+      errorDetails.push(...result.errorDetails);
+    }
+
+    return { processedCount, duplicatesCount, errorsCount, errorDetails };
   }
 
-  private async findClientByEmailAndPhone(email: string, phone: string) {
-    return this.prisma.client.findUnique({
-      where: {
-        email_phone: {
-          email,
-          phone,
-        },
-      },
+  private async getExistingClientsMap(rows: any[]) {
+    const map = new Map<string, boolean>();
+    const clientKeys = new Set<string>();
+
+    rows.forEach((row) => {
+      const email = String(row['Correo Electronico'] || '').trim();
+      const phone = String(row['Numero de Telefono'] || '').trim();
+      if (email && phone) {
+        clientKeys.add(`${email}|${phone}`);
+      }
     });
+
+    const keysArray = Array.from(clientKeys);
+
+    for (let i = 0; i < keysArray.length; i += UPLOAD_BATCH_SIZE) {
+      const batch = keysArray.slice(i, i + UPLOAD_BATCH_SIZE);
+      const conditions = batch.map((key) => {
+        const idx = key.indexOf('|');
+        const email = idx >= 0 ? key.slice(0, idx) : key;
+        const phone = idx >= 0 ? key.slice(idx + 1) : '';
+        return { email, phone };
+      });
+
+      const existing = await this.prisma.client.findMany({
+        where: {
+          OR: conditions.map((c) => ({ email: c.email, phone: c.phone })),
+        },
+        select: { email: true, phone: true },
+      });
+
+      existing.forEach((client) => {
+        map.set(`${client.email}|${client.phone}`, true);
+      });
+    }
+
+    return map;
+  }
+
+  private async saveBatch(clients: any[]) {
+    let success = 0;
+    let duplicates = 0;
+    let errors = 0;
+    const errorDetails: Array<{ email: string; error: string }> = [];
+
+    try {
+      const result = await this.prisma.client.createMany({
+        data: clients,
+        skipDuplicates: true,
+      });
+      success = result.count;
+      duplicates = clients.length - result.count;
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      this.logger.error(`Batch save error: ${err.message ?? 'Unknown'}`);
+
+      for (const client of clients) {
+        try {
+          await this.prisma.client.create({ data: client });
+          success++;
+        } catch (innerErr: unknown) {
+          const e = innerErr as { code?: string; message?: string };
+          if (e.code === 'P2002') {
+            duplicates++;
+          } else {
+            errors++;
+            errorDetails.push({
+              email: client.email || 'unknown',
+              error: e.message || 'Unknown error',
+            });
+          }
+        }
+      }
+    }
+
+    return { success, duplicates, errors, errorDetails };
   }
 
   async getUploads(limit: number = 20, offset: number = 0, status?: string) {
@@ -256,6 +319,46 @@ export class UploadsService {
       total,
       limit,
       offset,
+    };
+  }
+
+  async getUploadStatus(uploadId: string) {
+    const upload = await this.prisma.upload.findUnique({
+      where: { id: uploadId },
+    });
+
+    if (!upload) {
+      throw new BadRequestException('Upload not found');
+    }
+
+    const clientsCount = await this.prisma.client.count({
+      where: { uploadId },
+    });
+
+    const categorizedCount = await this.prisma.client.count({
+      where: {
+        uploadId,
+        categorization: { isNot: null },
+      },
+    });
+
+    return {
+      id: upload.id,
+      filename: upload.filename,
+      status: upload.status,
+      totalRows: upload.totalRows || 0,
+      processedRows: upload.processedRows || 0,
+      clientsSaved: clientsCount,
+      clientsCategorized: categorizedCount,
+      progress: upload.totalRows
+        ? Math.round(((upload.processedRows || 0) / upload.totalRows) * 100)
+        : 0,
+      categorizationProgress: clientsCount
+        ? Math.round((categorizedCount / clientsCount) * 100)
+        : 0,
+      createdAt: upload.createdAt,
+      completedAt: upload.completedAt,
+      errors: upload.errors,
     };
   }
 
