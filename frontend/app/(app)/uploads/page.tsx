@@ -23,20 +23,40 @@ import {
   RefreshCw,
   FileSpreadsheet,
   Clock,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
+
+const PAGE_SIZE = 50;
 
 export default function UploadsPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [clients, setClients] = useState<Client[]>([]);
+  const [totalClients, setTotalClients] = useState(0);
+  const [currentPage, setCurrentPage] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [pendingClientIds, setPendingClientIds] = useState<Set<string>>(new Set());
   const [activeUploadId, setActiveUploadId] = useState<string | null>(null);
+  const [totalCategorized, setTotalCategorized] = useState(0);
+  const [totalPending, setTotalPending] = useState(0);
 
-  // Cargar clientes al montar
+  // Cargar clientes al montar y cuando cambia la página
   useEffect(() => {
     loadClients();
-  }, []);
+  }, [currentPage]);
+
+  // Actualizar periódicamente mientras hay un upload activo
+  useEffect(() => {
+    if (!activeUploadId) return;
+
+    const interval = setInterval(() => {
+      loadClients(true);
+      loadTotals();
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [activeUploadId]);
 
   const loadClients = async (showRefreshState = false) => {
     try {
@@ -46,8 +66,10 @@ export default function UploadsPage() {
         setIsLoading(true);
       }
 
-      const response = await getAllClients(100, 0);
+      const offset = currentPage * PAGE_SIZE;
+      const response = await getAllClients(PAGE_SIZE, offset);
       setClients(response.clients);
+      setTotalClients(response.total || 0);
 
       // Limpiar pending de los que ya tienen categorización
       setPendingClientIds((prev) => {
@@ -59,12 +81,49 @@ export default function UploadsPage() {
         });
         return newSet;
       });
+
+      // Calcular totales de categorizados y pendientes
+      await loadTotals();
     } catch (error) {
       console.error('Error loading clients:', error);
       toast.error('Error al cargar clientes');
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
+    }
+  };
+
+  const loadTotals = async () => {
+    try {
+      const sampleSize = 500;
+      const sampleResponse = await getAllClients(sampleSize, 0);
+      const sampleClients = sampleResponse.clients;
+      
+      if (sampleClients.length === 0) {
+        setTotalCategorized(0);
+        setTotalPending(0);
+        return;
+      }
+      
+      const categorizedInSample = sampleClients.filter((c: Client) => c.categorization).length;
+      const pendingInSample = sampleClients.filter((c: Client) => !c.categorization).length;
+      
+      if (sampleResponse.total && sampleResponse.total > 0) {
+        const categorizedRatio = categorizedInSample / sampleClients.length;
+        const pendingRatio = pendingInSample / sampleClients.length;
+        
+        setTotalCategorized(Math.round(categorizedRatio * sampleResponse.total));
+        setTotalPending(Math.round(pendingRatio * sampleResponse.total));
+      } else {
+        setTotalCategorized(categorizedInSample);
+        setTotalPending(pendingInSample);
+      }
+    } catch (error) {
+      console.error('Error loading totals:', error);
+      const categorized = clients.filter((c) => c.categorization).length;
+      const pending = clients.filter((c) => !c.categorization).length;
+      setTotalCategorized(categorized);
+      setTotalPending(pending);
     }
   };
 
@@ -88,14 +147,36 @@ export default function UploadsPage() {
 
   const handleUploadComplete = () => {
     setActiveUploadId(null);
+    setCurrentPage(0); // Volver a la primera página
     loadClients(true);
+    loadTotals();
     toast.success('Procesamiento completado', {
       description: 'Los clientes se están categorizando automáticamente',
     });
   };
 
-  const pendingCount = clients.filter((c) => !c.categorization).length;
-  const categorizedCount = clients.filter((c) => c.categorization).length;
+  const totalPages = Math.ceil(totalClients / PAGE_SIZE);
+  const canGoPrevious = currentPage > 0;
+  const canGoNext = currentPage < totalPages - 1;
+
+  const handlePreviousPage = () => {
+    if (canGoPrevious) {
+      setCurrentPage((prev) => prev - 1);
+    }
+  };
+
+  const handleNextPage = () => {
+    if (canGoNext) {
+      setCurrentPage((prev) => prev + 1);
+    }
+  };
+
+  const handleRefresh = () => {
+    setIsRefreshing(true);
+    loadClients(true);
+    loadTotals();
+    setTimeout(() => setIsRefreshing(false), 500);
+  };
 
   return (
     <div className="flex flex-col gap-4 p-4">
@@ -144,7 +225,7 @@ export default function UploadsPage() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => loadClients(true)}
+              onClick={handleRefresh}
               disabled={isRefreshing}
             >
               <RefreshCw className={`h-4 w-4 mr-1 ${isRefreshing ? 'animate-spin' : ''}`} />
@@ -155,14 +236,14 @@ export default function UploadsPage() {
             <div className="text-center">
               <div className="flex items-center justify-center gap-2 mb-1">
                 <CheckCircle2 className="h-5 w-5 text-green-500" />
-                <span className="text-2xl font-bold">{categorizedCount}</span>
+                <span className="text-2xl font-bold">{totalCategorized}</span>
               </div>
               <span className="text-xs text-muted-foreground">Categorizados</span>
             </div>
             <div className="text-center">
               <div className="flex items-center justify-center gap-2 mb-1">
                 <Clock className="h-5 w-5 text-amber-500" />
-                <span className="text-2xl font-bold">{pendingCount}</span>
+                <span className="text-2xl font-bold">{totalPending}</span>
               </div>
               <span className="text-xs text-muted-foreground">Pendientes</span>
             </div>
@@ -242,6 +323,35 @@ export default function UploadsPage() {
                 })}
               </TableBody>
             </Table>
+          </div>
+        )}
+
+        {/* Paginación */}
+        {!isLoading && clients.length > 0 && totalPages > 1 && (
+          <div className="p-4 border-t flex items-center justify-between">
+            <div className="text-sm text-muted-foreground">
+              Página {currentPage + 1} de {totalPages}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handlePreviousPage}
+                disabled={!canGoPrevious}
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" />
+                Anterior
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleNextPage}
+                disabled={!canGoNext}
+              >
+                Siguiente
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
           </div>
         )}
       </Card>
