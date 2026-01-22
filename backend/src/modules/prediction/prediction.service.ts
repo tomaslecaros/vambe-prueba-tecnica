@@ -447,13 +447,13 @@ export class PredictionService {
             const newProb = 1 / (1 + Math.exp(-newZ));
             const probChange = baselineProb - newProb;
             
-            featureImpacts.push({
+        featureImpacts.push({
               feature: category.name,
               value: category.values[i],
               probChange,
-            });
-          }
-        }
+        });
+      }
+    }
       }
       featureIndex += category.values.length;
     }
@@ -470,7 +470,7 @@ export class PredictionService {
         value: f.value,
         impact: `${sign}${impactPercent}% (${description})`,
       };
-    });
+      });
   }
 
   private async getAvailableSamplesCount(): Promise<number> {
