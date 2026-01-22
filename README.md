@@ -167,3 +167,29 @@ cd frontend && npm install && npm run dev
 - **Backend**: NestJS, TypeScript, Prisma, PostgreSQL, Redis, Bull, OpenAI, `ml-logistic-regression`.  
 - **Frontend**: Next.js 15 (App Router), React 19, TypeScript, Tailwind CSS, shadcn/ui, Axios.
 
+---
+
+## 3. Despliegue en producción
+
+El proyecto está desplegado en producción para facilitar la revisión sin necesidad de instalar dependencias locales:
+
+### Servicios desplegados
+
+- **Frontend y Backend**: [Northflank](https://northflank.com)
+  - Frontend y backend desplegados como servicios separados en Northflank
+  - URLs de producción disponibles en los servicios desplegados
+
+- **Base de datos**: [Supabase](https://supabase.com)
+  - PostgreSQL gestionado en Supabase
+  - Conexión configurada desde el backend en producción
+
+- **Redis**: [Upstash](https://upstash.com)
+  - Redis gestionado en Upstash para las colas de Bull
+  - Conexión configurada desde el backend en producción
+
+### Nota para el revisor
+
+El proyecto está completamente funcional en producción. No es necesario instalar Docker, PostgreSQL, Redis ni configurar variables de entorno locales para revisar la aplicación. Todas las dependencias están gestionadas en los servicios en la nube mencionados arriba.
+
+Si prefieres ejecutarlo localmente, sigue las instrucciones de la sección 1.
+

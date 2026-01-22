@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { PredictionStatusCard, PredictionForm } from '@/components/analytics';
+import { PredictionStatusCard, PredictionForm } from '@/components/prediction';
 import { getPredictionStatus, predictClosure } from '@/lib/api';
 import type { PredictionStatusResponse, PredictionResponse, PredictionErrorResponse } from '@/types';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -10,7 +10,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
-export default function AnalyticsPage() {
+export default function PredictionPage() {
   const [status, setStatus] = useState<PredictionStatusResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [transcription, setTranscription] = useState('');

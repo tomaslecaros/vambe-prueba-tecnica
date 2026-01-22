@@ -18,8 +18,8 @@ const navigationItems = [
     icon: BarChart3,
   },
   {
-    href: '/analytics',
-    label: 'Analytics',
+    href: '/prediction',
+    label: 'Predicción',
     icon: TrendingUp,
   },
   {
